@@ -42,7 +42,7 @@ all:	Image
 
 Image: tools/system tools/build 
 	objcopy -O binary -R .note -R .comment tools/system tools/kernel 
-	tools/build tools/system $(ROOT_DEV) > Image 
+	tools/build tools/system $(ROOT_DEV) > GuestOS 
 	#rm tools/kernel -f 
 	   sync
 
@@ -91,7 +91,7 @@ tmp.s:	boot/bootsect.s tools/system
 	cat boot/bootsect.s >> tmp.s
 
 clean:
-	rm -f Image System.map tmp_make core boot/bootsect boot/setup
+	rm -f GuestOS System.map tmp_make core boot/bootsect boot/setup
 	rm -f init/*.o tools/system tools/build boot/*.o
 	(cd mm;make clean)
 	(cd fs;make clean)
