@@ -93,7 +93,7 @@ AP_DEFAULT_TASK_NR = 0x50      /* 这个数字已经超出了任务的最大个�
 
 .text
 .globl idt,gdt,tmp_floppy_area,params_table_addr,load_os_addr,hd_read_interrupt,hd_intr_cmd,check_x87,total_memory_size,vm_exit_handler
-.globl startup_32,sync_semaphore,idle_loop,ap_default_loop,task_exit_clear,globle_var_test_start,globle_var_test_end,init_pgt
+.globl startup_32,task_exit_clear,init_pgt
 startup_32:
 	movl $0x10,%eax
 	mov %ax,%ds
@@ -101,7 +101,6 @@ startup_32:
 	mov %ax,%fs
 	mov %ax,%gs
 	mov %ax,%ss
-
 /* 下面计算内存的大小统一用4K作为粒度。 */
     xor %edx,%edx
 	movw %ds:0x90002,%dx          /* 这里得到的是granularity为64K的extend2的大小，所以要乘以16，前面的16M/4K=4K, 这里也是个小坑，mem长度是2字节，之前用movl是4字节有问题啊 */
@@ -143,13 +142,13 @@ bochs_emulator:
      * 因为如果内存>512M的话，内核实地址映射的内存是(512-64)M，因为要留64M地址空间映射>512M内存以及保留空间(64M)的物理地址。
      * 此时还没开启分页，所以整个物理内存都可以实地址访问。
      */
-	subl $0x4,%edx
+//	subl $0x4,%edx
     /* init a temp stack in the highest addr of memory for handling HD intr.  */
-init_temp_stack:
-	movl %edx,temp_stack
-	lss temp_stack,%esp
+//init_temp_stack:
+	//movl %edx,temp_stack
+	//lss temp_stack,%esp
 
-	call setup_gdt
+//	call setup_gdt
 	call setup_idt
 
 	movl $0x10,%eax		# reload all the segment registers
@@ -158,7 +157,7 @@ init_temp_stack:
 	mov %ax,%fs
 	mov %ax,%gs
 	/* Move the params, such as memeory size, vedio card, hd info to the highest address of the memory, because addr bound will be erased later.  */
-    call move_params_to_memend
+ //   call move_params_to_memend
 
 	lss stack_start,%esp
 	jmp main_entry
