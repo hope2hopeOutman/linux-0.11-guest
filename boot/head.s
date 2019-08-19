@@ -93,7 +93,7 @@ AP_DEFAULT_TASK_NR = 0x50      /* 这个数字已经超出了任务的最大个�
 
 .text
 .globl idt,gdt,tmp_floppy_area,params_table_addr,load_os_addr,hd_read_interrupt,hd_intr_cmd,check_x87,total_memory_size,vm_exit_handler
-.globl startup_32,task_exit_clear,init_pgt
+.globl startup_32,task_exit_clear,init_pgt,io_bitmap_a,io_bitmap_b
 startup_32:
 	movl $0x10,%eax
 	mov %ax,%ds
@@ -136,7 +136,10 @@ bochs_emulator:
     popl %ebx
     popl %edx             /* 恢复内存的总大小，单位是4K,如果内存>512M这里的edx恒等于512M，注意:这里还没开启分页功能，所以地址的访问是实地址映射。 */
 
-    shl $0x0C,%edx        /* 注意：这里的edx应该是<=(512M/4k) */
+    /* Move the params, such as memeory size, vedio card, hd info to the highest address of the memory, because addr bound will be erased later.  */
+    call move_params_to_memend
+
+    //shl $0x0C,%edx        /* 注意：这里的edx应该是<=(512M/4k) */
     /*
      * 此时将内核能实地址映射的内存的(最高地址-4)处设置为临时栈顶，注意“此时”的含义，
      * 因为如果内存>512M的话，内核实地址映射的内存是(512-64)M，因为要留64M地址空间映射>512M内存以及保留空间(64M)的物理地址。
@@ -322,9 +325,16 @@ gdt:
 	.quad 0x0000000000000000	/* TEMPORARY - don't use */
 	.fill 252,8,0			    /* space for LDT's and TSS's etc */
 .org 0x4000
-tr_tss:	.fill 256,8,0
+tr_tss:	.fill 512,8,0
+
 .org 0x5000
-ldt:	.fill 256,8,0
+ldt:	.fill 512,8,0
+
+.org 0x6000
+io_bitmap_a: .fill 512,8,0
+
+.org 0x7000
+io_bitmap_b: .fill 512,8,0
 
 /*
  * Record the address of the params table for main func to init.
