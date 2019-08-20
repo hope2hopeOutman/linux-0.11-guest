@@ -13,6 +13,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <signal.h>
+#include <linux/head.h>
 
 #define ALRMMASK (1<<(SIGALRM-1))
 #define KILLMASK (1<<(SIGKILL-1))
@@ -24,6 +25,7 @@
 #include <linux/tty.h>
 #include <asm/segment.h>
 #include <asm/system.h>
+#include <asm/io.h>
 
 #define _L_FLAG(tty,f)	((tty)->termios.c_lflag & f)
 #define _I_FLAG(tty,f)	((tty)->termios.c_iflag & f)
@@ -49,6 +51,7 @@
 #define O_LCUC(tty)	_O_FLAG((tty),OLCUC)
 
 unsigned long tty_io_semaphore = 0;
+extern unsigned short	video_port_reg;		/* Video register select port	*/
 
 struct tty_struct tty_table[] = {
 	{
@@ -294,6 +297,17 @@ int tty_read(unsigned channel, char * buf, int nr)
 
 int tty_write(unsigned channel, char * buf, int nr)
 {
+	/* 用户态执行printf系统调用到该方法，执行打印功能，这时要触发VM-EXIT,到host中打印. */
+	/* Cause VM-EXIT, Using host print to instead of Guest print. */
+	exit_reason_io_vedio_struct* exit_reason_io_vedio_p = (exit_reason_io_vedio_struct*) VM_EXIT_SLEF_DEFINED_INFO_ADDR;
+	exit_reason_io_vedio_p->exit_reason_no = VM_EXIT_REASON_IO_INSTRUCTION;
+	exit_reason_io_vedio_p->print_size = nr;
+	exit_reason_io_vedio_p->print_buf = buf;
+	cli();
+	outb_p(14, video_port_reg);  /* 触发VM-EXIT */
+	sti();
+	return nr;
+
 	int lock_flag = 1;  /* 加锁成功了，设置为1 */
 	struct task_struct* current = get_current_task();
 	static cr_flag=0;
