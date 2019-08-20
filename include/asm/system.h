@@ -11,6 +11,7 @@
  *    这时IRET返回后还是内核态，如何让IRET返回到用户态呢，这就要像下面这样，只要将cs设置为用户态段(selector.CPL.GDT|LDT)，IRET就检测处自己当前是内核态，要返回到用户态，
  *    因此IRET会从栈中多弹出两个值加载到对应的ss和esp寄存器的，ok。
  */
+/*
 #define move_to_user_mode() \
 __asm__("movl %%esp,%%eax\n\t"   \
 		"pushl $0x17\n\t" \
@@ -25,6 +26,7 @@ __asm__("movl %%esp,%%eax\n\t"   \
 		"movw %%ax,%%fs\n\t" \
 		"movw %%ax,%%gs" \
 		:::"ax")
+*/
 
 #define sti() __asm__ ("sti"::)
 #define cli() __asm__ ("cli"::)

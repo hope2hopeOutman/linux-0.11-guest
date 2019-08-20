@@ -32,8 +32,8 @@
 #define _O_FLAG(tty,f)	((tty)->termios.c_oflag & f)
 
 #define L_CANON(tty)	_L_FLAG((tty),ICANON)
-#define L_ISIG(tty)	_L_FLAG((tty),ISIG)
-#define L_ECHO(tty)	_L_FLAG((tty),ECHO)
+#define L_ISIG(tty)  	_L_FLAG((tty),ISIG)
+#define L_ECHO(tty) 	_L_FLAG((tty),ECHO)
 #define L_ECHOE(tty)	_L_FLAG((tty),ECHOE)
 #define L_ECHOK(tty)	_L_FLAG((tty),ECHOK)
 #define L_ECHOCTL(tty)	_L_FLAG((tty),ECHOCTL)
@@ -44,11 +44,11 @@
 #define I_CRNL(tty)	_I_FLAG((tty),ICRNL)
 #define I_NOCR(tty)	_I_FLAG((tty),IGNCR)
 
-#define O_POST(tty)	_O_FLAG((tty),OPOST)
-#define O_NLCR(tty)	_O_FLAG((tty),ONLCR)
-#define O_CRNL(tty)	_O_FLAG((tty),OCRNL)
+#define O_POST(tty)	    _O_FLAG((tty),OPOST)
+#define O_NLCR(tty)	    _O_FLAG((tty),ONLCR)
+#define O_CRNL(tty)	    _O_FLAG((tty),OCRNL)
 #define O_NLRET(tty)	_O_FLAG((tty),ONLRET)
-#define O_LCUC(tty)	_O_FLAG((tty),OLCUC)
+#define O_LCUC(tty)	    _O_FLAG((tty),OLCUC)
 
 unsigned long tty_io_semaphore = 0;
 extern unsigned short	video_port_reg;		/* Video register select port	*/
