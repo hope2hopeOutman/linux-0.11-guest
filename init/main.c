@@ -145,11 +145,11 @@ void main(void)		/* This really IS void, no error here. */
 		unsigned long code_szie = (code_end-OS_BASE_ADDR);
 		if (code_szie < 0x100000) {
 		    //buffer_memory_end = (OS_BASE_ADDR + 4*1024*1024) / 0x1000; //因为内核最终加载到以5M为基地址的内存处，所以这里要调整。
-		    buffer_memory_end = 0xC00;  /* 内核+BUFFER占用12M，3个目录项 */
+		    buffer_memory_end = 0x1000;  /* Host内核+Host_Buffer+Guest内核+Guest_Buffer占用16M，4个目录项 */
 		}
 		else {
 			//buffer_memory_end = ((code_end>>20)<<20 + 4*1024*1024);这里千万别这么写,GCC会优化成用sbb指令，造成结果有误，坑爹啊。
-			buffer_memory_end = 0xC00;  /* 内核+BUFFER占用12M，3个目录项 */
+			buffer_memory_end = 0x1000;  /* Host内核+Host_Buffer+Guest内核+Guest_Buffer占用16M，4个目录项 */
 		}
 	}
 	else {

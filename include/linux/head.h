@@ -31,6 +31,11 @@ struct apic_info {
 	unsigned long vm_entry_flag;  /* 1: have entered non-root vm env, 0: host env (VMM) */
 };
 
+typedef struct cr3_target_value_struct{
+	unsigned long valid;  /* 1: valid, 0: invalid */
+	unsigned long cr3;
+} cr3_target_value_struct;
+
 //extern unsigned long pg_dir[1024];
 extern unsigned long* pg_dir;
 extern desc_table idt,gdt;
@@ -154,6 +159,7 @@ extern unsigned long caching_linear_addr(unsigned long* addr_array, int length, 
 #define IA32_VMX_EXIT_MSR_LOAD_ADDR_FULL_ENCODING   0x2008
 #define IA32_VMX_EXIT_MSR_LOAD_ADDR_HIGH_ENCODING   0x2009
 
+#define IA32_VMX_CR3_TARGET_COUNT_ENCODING                0x400A
 #define IA32_VMX_ENTRY_CTLS_ENCODING                      0x4012
 #define IA32_VMX_ENTRY_MSR_LOAD_COUNT_ENCODING            0x4014
 #define IA32_VMX_ENTRY_MSR_LOAD_ADDR_FULL_ENCODING        0x200A
@@ -184,6 +190,11 @@ extern unsigned long caching_linear_addr(unsigned long* addr_array, int length, 
 #define HOST_FS_ENCODING   0x0C08
 #define HOST_GS_ENCODING   0x0C0A
 #define HOST_TR_ENCODING   0x0C0C
+
+#define IA32_VMX_CR3_TARGET_VALUE0_ENCODING   0x6008
+#define IA32_VMX_CR3_TARGET_VALUE1_ENCODING   0x600A
+#define IA32_VMX_CR3_TARGET_VALUE2_ENCODING   0x600C
+#define IA32_VMX_CR3_TARGET_VALUE3_ENCODING   0x600E
 
 #define HOST_FS_BASE_ENCODING     0x6C06
 #define HOST_GS_BASE_ENCODING     0x6C08
@@ -316,6 +327,8 @@ extern unsigned long caching_linear_addr(unsigned long* addr_array, int length, 
 
 #define GDT_IDENTITY_NO  0
 #define IDT_IDENTITY_NO  1
+
+#define IA32_VMX_CR3_TARGET_COUNT  4
 
 /* 这块的定义一定要和Makefile里的-Ttext起始地址一致，这点一定要注意 */
 #define GUEST_OS_IDT_BASE_ADDR               0xC02000
