@@ -156,7 +156,7 @@ void main(void)		/* This really IS void, no error here. */
 		/*
 		 * 内存必须>=64M, 因为在内核空间分配了一个永久实地址映射空间，大小为32M，加上内核占用的12M空间，一共要44M内存空间，所以这里定义内存最小为64M.
 		 */
-		panic("Real physical memory size must be greater than 64M.");
+		panic("GuestOS: Real physical memory size must be greater than 64M.");
 	}
 
 	main_memory_start = buffer_memory_end;
@@ -176,12 +176,13 @@ void main(void)		/* This really IS void, no error here. */
 	sched_init();
 	buffer_init(buffer_memory_end);
 	hd_init();
-	printk("mem_size: %u (granularity 4K) \n\r", memory_end);  /* 知道print函数为甚么必须在这里才有效吗嘿嘿。 */
+	printk("GuestOS: mem_size: %u (granularity 4K) \n\r", memory_end);  /* 知道print函数为甚么必须在这里才有效吗嘿嘿。 */
 	sti();
+	init_tasks();
 	move_to_user_mode();
-	if (!fork()) {		/* we count on this going ok */
+	//if (!fork()) {		/* we count on this going ok */
 		init();
-	}
+	//}
 /*
  *   NOTE!!   For any other task 'pause()' would mean we have to get a
  * signal to awaken, but task0 is the sole exception (see 'schedule()')
@@ -192,7 +193,7 @@ void main(void)		/* This really IS void, no error here. */
 	for(;;) pause();
 }
 
-static int printf(const char *fmt, ...)
+int printf(const char *fmt, ...)
 {
 	va_list args;
 	int i;
@@ -212,8 +213,8 @@ void init(void)
 	(void) open("/dev/tty0",O_RDWR,2);
 	(void) dup(0);
 	(void) dup(0);
-	printf("%d buffers = %d bytes buffer space\n\r",NR_BUFFERS, NR_BUFFERS*BLOCK_SIZE);
-	printf("Free mem: %d (granularity 4k)\n\r",memory_end-main_memory_start);
+	printf("GuestOS: %d buffers = %d bytes buffer space\n\r",NR_BUFFERS, NR_BUFFERS*BLOCK_SIZE);
+	printf("GuestOS: Free mem: %d (granularity 4k)\n\r",memory_end-main_memory_start);
 	while (1) {
 		/* Guest OS 运行idle_loop，等待host调度一个任务，让它运行. */
 		__asm__ ("guest_loop:\n\t"            \

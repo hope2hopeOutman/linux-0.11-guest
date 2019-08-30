@@ -60,6 +60,9 @@ extern int timer_interrupt(void);
 extern int system_call(void);
 
 union task_union init_task = {INIT_TASK,};
+union task_union task1 = {INIT_TASK,};
+union task_union task2 = {INIT_TASK,};
+union task_union task3 = {INIT_TASK,};
 union task_union ap_default_task = {INIT_TASK,};
 union task_union vm_defualt_task = {INIT_TASK,};
 /*
@@ -75,16 +78,36 @@ struct apic_info apic_ids[LOGICAL_PROCESSOR_MAXIMUM] = {{0,0,BSP_APIC_REGS_DEFAU
 														{0,0,BSP_APIC_REGS_DEFAULT_LOCATION,0,0,&(ap_default_task.task)},};
 long volatile jiffies=0;
 long startup_time=0;
-//struct task_struct *current = &(init_task.task);
-//struct task_struct *current_per_apic[LOGICAL_PROCESSOR_NUM] = {&(init_task.task),0,0,0};
 struct task_struct *last_task_used_math = NULL;
-struct task_struct * task[NR_TASKS] = {&(init_task.task), };
+struct task_struct * task[NR_TASKS] = {&(init_task.task),&(task1.task),&(task2.task),&(task3.task), };
 long user_stack [ PAGE_SIZE>>2 ];
 struct {
 	long * a;
 	short b;
 	} stack_start = {&user_stack[PAGE_SIZE>>2] , 0x10};
 
+void task1_print() {
+	printf("Task1 print in VM\n\r");
+}
+
+void task2_print() {
+	printf("Task2 print in VM\n\r");
+}
+
+void task3_print() {
+	printf("Task3 print in VM\n\r");
+}
+
+
+void init_tasks() {
+	task1.task.tss.esp0 = (unsigned long)&task1 + PAGE_SIZE;
+	task1.task.tss.eip = task1_print;
+	//esp也要初始化,通过get_free_page获取
+	task2.task.tss.esp0 = (unsigned long)&task2 + PAGE_SIZE;
+	task2.task.tss.eip = task2_print;
+	task3.task.tss.esp0 = (unsigned long)&task3 + PAGE_SIZE;
+	task3.task.tss.eip = task3_print;
+}
 /*
  * 获取当前processor正在运行的任务
  */

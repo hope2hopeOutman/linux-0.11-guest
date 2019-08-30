@@ -63,25 +63,48 @@ unsigned long remap_linear_addr_semaphore = 0;      /* 896M~1024M */
 unsigned long remap_msr_linear_addr_semaphore = 0;  /* 4k~640K    */
 
 /* 进程切换相关参数的备份 */
-cr3_target_value_struct cr3_target_values[4] = {{1,0},};             /* mov value,cr3,最大只有4个是有效的 */
-cr3_target_value_struct cr3_condidate_values[NR_TASKS-4] = {{0,0},}; /* 有效的，候选cr3,也就是进程 */
-unsigned long vmcs_cr3_target_value_fields[4] = {IA32_VMX_CR3_TARGET_VALUE0_ENCODING,
-		                                         IA32_VMX_CR3_TARGET_VALUE1_ENCODING,
-												 IA32_VMX_CR3_TARGET_VALUE2_ENCODING,
-												 IA32_VMX_CR3_TARGET_VALUE3_ENCODING};
 
-unsigned long get_free_cr3_target_index() {
+
+cr3_target_value_struct cr3_target_values[IA32_VMX_CR3_TARGET_COUNT] = {{0,0},{-1,0},{-1,0},{-1,0}};             /* mov value,cr3,最大只有4个是有效的 */
+unsigned long vmcs_cr3_target_value_fields[IA32_VMX_CR3_TARGET_COUNT] = {IA32_VMX_CR3_TARGET_VALUE0_ENCODING,
+																		 IA32_VMX_CR3_TARGET_VALUE1_ENCODING,
+																		 IA32_VMX_CR3_TARGET_VALUE2_ENCODING,
+																		 IA32_VMX_CR3_TARGET_VALUE3_ENCODING};
+
+int get_free_cr3_target_index() {
 	for (int i=0;i < IA32_VMX_CR3_TARGET_COUNT; i++) {
-		if (!cr3_condidate_values[i].valid) {
+		if (!cr3_target_values[i].task_nr < 0) {
 			return i;
 		}
 	}
+	return -1;
+}
 
+int get_swap_cr3_target_index() {
+	int sched_count = 0;
+	int index = 0;
 	for (int i=0;i < IA32_VMX_CR3_TARGET_COUNT; i++) {
-		if (cr3_condidate_values[i].cr3 != current->tss.cr3) {
-            //todo 先备份到cr3_condidate_values，然后再替换.
-			return i;
+		if (cr3_target_values[i].task_nr != current->task_nr) {
 		}
+	}
+	return index;
+}
+
+void set_cr3_target_value(unsigned long cr3) {
+	int free_index = get_free_cr3_target_index();
+	if (free_index < 0) {
+		int swap_index = get_swap_cr3_target_index();
+
+		/* backup old cr3_target to candidate list. */
+        int candidate_index = get_free_cr3_target_index();
+        if (candidate_index < 0) {
+        	/* This case never occur, because fork ops will restrict it never greater than NR_TASKS */
+        	candidate_index = get_free_cr3_target_index();
+        }
+		cr3_target_values[swap_index].cr3   = cr3;
+	}
+
+	for (int i=0;i<IA32_VMX_CR3_TARGET_COUNT;i++) {
 	}
 }
 
@@ -464,7 +487,7 @@ int copy_page_tables(unsigned long from,unsigned long to,long size,struct task_s
 		panic("copy_page_tables called with wrong alignment");
 	unsigned long *new_dir_page = (unsigned long*)get_free_page(PAGE_IN_REAL_MEM_MAP);  /* 为新进程分配一页物理内存用于存储目录表 */
 
-	write_vmcs_field(vmcs_cr3_target_value_fields[], (unsigned long)new_dir_page);
+	//write_vmcs_field(vmcs_cr3_target_value_fields[0], (unsigned long)new_dir_page);
 
 	//printk("new_dir=%p, nr=%d, f_pid=%d, f_nr: %d\n\r",new_dir_page, new_task->task_nr, new_task->father, new_task->father_nr);
 

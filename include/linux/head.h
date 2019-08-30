@@ -32,7 +32,7 @@ struct apic_info {
 };
 
 typedef struct cr3_target_value_struct{
-	unsigned long valid;  /* 1: valid, 0: invalid */
+	unsigned long task_nr;        /* task number */
 	unsigned long cr3;
 } cr3_target_value_struct;
 
