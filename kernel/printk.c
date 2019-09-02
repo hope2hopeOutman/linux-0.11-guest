@@ -42,6 +42,8 @@ int printk(const char *fmt, ...)
 	cli();
 	outb_p(14, video_port_reg);
 	sti();
+
+	unlock_op(&tty_io_semaphore);
 	return i;
 
 	__asm__("push %%fs\n\t"
