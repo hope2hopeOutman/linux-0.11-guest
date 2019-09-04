@@ -175,7 +175,7 @@ int find_empty_process(void) {
 			 *  */
 			task_page->state = TASK_UNINTERRUPTIBLE;
 			task_page->pid = last_pid;  /* 这里要设置PID,否则后面进程并发会造成多个进程共用同一个PID */
-			task[i] = task_page;  /* 这样就确保任务此时,是不会被调度的. */
+			task[i] = task_page;        /* 这样就确保任务此时,是不会被调度的. */
 			if (lock_flag) {
 				unlock_op(&find_empty_process_semaphore);
 				lock_flag = 0;

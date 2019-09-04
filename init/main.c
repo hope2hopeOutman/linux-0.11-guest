@@ -180,9 +180,9 @@ void main(void)		/* This really IS void, no error here. */
 	sti();
 	init_tasks();
 	move_to_user_mode();
-	//if (!fork()) {		/* we count on this going ok */
+	if (!fork()) {		/* we count on this going ok */
 		init();
-	//}
+	}
 /*
  *   NOTE!!   For any other task 'pause()' would mean we have to get a
  * signal to awaken, but task0 is the sole exception (see 'schedule()')
