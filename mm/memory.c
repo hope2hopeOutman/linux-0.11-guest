@@ -113,9 +113,13 @@ void reset_swap_table_entry(unsigned long linear_addr, unsigned long phy_addr)
 {
 	struct task_struct* current = get_current_task();
 	unsigned long* dir_item         = (unsigned long*)(current->tss.cr3 + (linear_addr >> 20) & 0xFFC);     /* 计算该线性地址所在的目录项，既相对于目录表基地址的offset */
+	printk("dir_item: %08x\n\r", (unsigned long)dir_item);
 	unsigned long table_base        = (unsigned long)(*dir_item & 0xFFFFF000);           /* 通过目录项获得对应页表的起始地址,因为内核的目录表基地址是0x00,所以可以这样直接访问 */
+	printk("table_base: %08x\n\r", table_base);
 	unsigned long table_item_offset = (linear_addr >> 10) & 0xFFC;                       /* 计算页表项在页表中的位置，即相对于页表基地址的offset */
+	printk("table_item_offset: %08x\n\r", table_item_offset);
 	unsigned long* table_entry      = (unsigned long*)(table_base + table_item_offset);  /* 页表基地址加上页表项的offset就得到对应页表项的实际物理地址了 */
+	printk("table_entry: %08x\n\r", (unsigned long)table_entry);
 	*table_entry                    = phy_addr | 7; /* 将>(512-64)M的一页物理地址，设置在该页表项中，下次再对该线性地址进行读写操作就会映射到该>(512-64)M的物理地址了哈哈 */
 }
 
