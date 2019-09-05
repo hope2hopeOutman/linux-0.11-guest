@@ -81,6 +81,7 @@ reschedule:
 system_call:
 	cmpl $nr_system_calls-1,%eax
 	ja bad_sys_call
+
 	push %ds
 	push %es
 	push %fs
@@ -318,6 +319,3 @@ handle_ipi_interrupt:
 	popl %ebx
 	popl %eax
 	iret
-
-
-

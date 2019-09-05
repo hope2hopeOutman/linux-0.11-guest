@@ -538,6 +538,18 @@ void schedule(void)
 		unlock_op(&sched_semaphore);
 		lock_flag = 0;
 	}
+
+	/*
+	 * 在进行进程切换之前要先保存新老任务的task_nr和task_switch_entry,
+	 * 这样方便VMresume到GuestOS后,在task_switch中进行真正的任务切换.
+	 */
+	if (task[next] != *current) {
+		exit_reason_task_switch_struct* exit_reason_task_switch = (exit_reason_task_switch_struct*) VM_EXIT_SLEF_DEFINED_INFO_ADDR;
+		exit_reason_task_switch->new_task_nr = task[next]->task_nr;
+		exit_reason_task_switch->old_task_nr = (*current)->task_nr;
+		exit_reason_task_switch->task_switch_entry = (unsigned long)task_switch;
+	}
+
 	switch_to(next,current);
 }
 
@@ -876,4 +888,31 @@ void sched_init(void)
 #endif
 
 	set_system_gate(0x80,&system_call);
+}
+
+/* 当任务通过系统调用或中断进入内核态要设置tss.cs=0x08，这样做主要是为了区分是否是新建任务第一次运行 */
+void set_task_tss(unsigned long task_nr) {
+}
+
+/*
+ * GuestOS在内核态调用该方法实现在GuestOS中进行真正的进程切换.
+ * 1. 首先保存老任务执行ljmp的下一条指令的地址。
+ *    这样当重新调度老任务执行时，就从ljmp的下一条指令开始执行了。
+ * 2. 利用新任务的task_struct.tss恢复新任务的执行上下文，执行新任务。
+ * 3. 由task switch触发的VM-EXIT,在执行VM-RESUME后，都会到该函数中执行真正的任务切换。
+ */
+void task_switch() {
+	/* 备份老任务的内核态ksp和kip到其对应task_struct.tss的esp和eip */
+	exit_reason_task_switch_struct* exit_reason_task_switch = (exit_reason_task_switch_struct*) VM_EXIT_SLEF_DEFINED_INFO_ADDR;
+	task[exit_reason_task_switch->old_task_nr]->tss.esp = exit_reason_task_switch->old_task_esp;
+	task[exit_reason_task_switch->old_task_nr]->tss.eip = exit_reason_task_switch->old_task_eip;
+
+	/* 初始化新任务的context */
+	unsigned long new_task_nr = exit_reason_task_switch->new_task_nr;
+	unsigned long new_task_eip = task[new_task_nr]->tss.eip;
+	unsigned long new_task_esp = task[new_task_nr]->tss.esp;
+	/* 判断新任务的状态，是在内核态还是用户态(新创建的进程其task_struct.tss.cs!=0x08) */
+	if (task[new_task_nr]->tss.cs != 0x08) {
+
+	}
 }
