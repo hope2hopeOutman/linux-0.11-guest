@@ -69,6 +69,10 @@ int copy_mem(int nr, struct task_struct * p) {
  * also copies the data segment in it's entirety.
  */
 unsigned long copy_process_semaphore = 0;
+/*
+ * 解释一下这些参数: 它们都是用户态参数，都要保存到tss中的，这样在任务切换的时候，就执行父进程的代码了，而且是fork函数中int80的后一条指令，
+ * 所以，切换到子进程执行的时候，子进程是在用户态下执行的.
+ */
 int copy_process(int nr, long ebp, long edi, long esi, long gs, long none,
 		long ebx, long ecx, long edx, long fs, long es, long ds, long eip,
 		long cs, long eflags, long esp, long ss) {

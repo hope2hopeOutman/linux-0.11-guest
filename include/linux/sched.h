@@ -56,6 +56,19 @@ struct i387_struct {
 	long	st_space[20];	/* 8*10 bytes for each FP-reg = 80 bytes */
 };
 
+/*
+ * 因为在GuestOS中不能执行任务切换指令自动进行进程上下文的切换，所以tss结构体中保存的context上下文信息在某些情况下就不是有效的了
+ * 所以要确保Tss中保存的context的consistency.
+ * 有两种情况需要却别对待：
+ *     1. 被调度进程处于用户态(表明该进程是fork的新进程，第一次被调度执行)。
+ *     2. 被调度进程处于内核态(表明该进程至少已经运行过一个时间片了)。
+ *     以上两种进程有两种处理方式：
+ *        VMresume返回后
+ *        (1) 如果执行的第一种情况的新进程，那么就得自己写一个类似move_to_user_mode函数通过IRET指令返回其用户态执行。
+ *        (2) 如果执行的是第二种情况的进程，那么只需要将上下文恢复即可，被调度的进程还是在自己的内核态执行(从ljmp指令的后一条指令开始执行)，
+ *            最后会调用sys_call中的IRET返回到其用户态。
+ *   所以这时需要一个标识来区分进程的状态， 这里通过CS的值是否等于0x08来确定是否处于内核态。
+ */
 struct tss_struct {
 	long	back_link;	/* 16 high bits zero */
 	long	esp0;
@@ -122,20 +135,15 @@ struct task_struct {
 	int sched_on_ap;  /* 1: running on AP, 0: not */
 	int task_nr;
 	int father_nr;
-	/*
-	 * 因为在GuestOS中不能执行任务切换指令自动进行进程上下文的切换，所以tss结构体中保存的context上下文信息在某些情况下就不是有效的了.
-	 * 例如：
-	 *     1. 新创建的进程在第一次运行的时候其tss结构体中的所有上下文信息是有效的。
-	 *     2. 当进程执行第一次进程切换的时候，当切换到其他进程执行后，要自己手动保存老进程的上下文信息。
-	 *     以上两种进程有两种处理方式：
-	 *        VMresume返回后
-	 *        (1) 如果执行的第一种情况的新进程，那么就得自己写一个类似move_to_usermode函数通过IRET指令返回其用户态执行。
-	 *        (2) 如果执行的是第二种情况的进程，那么只需要将上下文恢复即可，被调度的进程还是在自己的内核态执行(从ljmp指令的后一条指令开始执行)，
-	 *            最后会调用sys_call中的IRET返回到其用户态。
-	 *   所以这时需要一个标识来区分进程的状态。
-	 *  */
-	int kernel_status;  /* 1: kernel state, 0: user state */
 };
+
+typedef struct exit_reason_task_switch_struct {
+	ulong  task_switch_entry;  /* GuestOS set, read only for VMM    */
+	ulong  new_task_nr;        /* GuestOS set, only used by GuestOS */
+	ulong  old_task_nr;        /* GuestOS set, only used by GuestOS */
+	struct tss_struct tss;
+} exit_reason_task_switch_struct;
+
 
 /*
  *  INIT_TASK is used to set up the first task table, touch at

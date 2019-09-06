@@ -408,7 +408,7 @@ void schedule(void)
 	struct task_struct ** current = &(apic_info->current);
 	int i,next,c;
 	struct task_struct ** p;
-/* check alarm, wake up any interruptible tasks that have got a signal */
+    /* check alarm, wake up any interruptible tasks that have got a signal */
 
 	lock_op(&sched_semaphore);  /* 这里一定要加锁，否则会出现多个AP同时执行同一个task */
 	/*
@@ -547,7 +547,7 @@ void schedule(void)
 		exit_reason_task_switch_struct* exit_reason_task_switch = (exit_reason_task_switch_struct*) VM_EXIT_SLEF_DEFINED_INFO_ADDR;
 		exit_reason_task_switch->new_task_nr = task[next]->task_nr;
 		exit_reason_task_switch->old_task_nr = (*current)->task_nr;
-		exit_reason_task_switch->task_switch_entry = (unsigned long)task_switch;
+		exit_reason_task_switch->task_switch_entry = (ulong)task_switch;
 	}
 
 	switch_to(next,current);
@@ -904,8 +904,13 @@ void set_task_tss(unsigned long task_nr) {
 void task_switch() {
 	/* 备份老任务的内核态ksp和kip到其对应task_struct.tss的esp和eip */
 	exit_reason_task_switch_struct* exit_reason_task_switch = (exit_reason_task_switch_struct*) VM_EXIT_SLEF_DEFINED_INFO_ADDR;
-	task[exit_reason_task_switch->old_task_nr]->tss.esp = exit_reason_task_switch->old_task_esp;
-	task[exit_reason_task_switch->old_task_nr]->tss.eip = exit_reason_task_switch->old_task_eip;
+	ulong ldt  = task[exit_reason_task_switch->old_task_nr]->tss.ldt;
+	ulong esp0 = task[exit_reason_task_switch->old_task_nr]->tss.esp0;
+	ulong cr3  = task[exit_reason_task_switch->old_task_nr]->tss.cr3;
+	task[exit_reason_task_switch->old_task_nr]->tss = exit_reason_task_switch->tss;
+	task[exit_reason_task_switch->old_task_nr]->tss.ldt  = ldt;
+	task[exit_reason_task_switch->old_task_nr]->tss.esp0 = esp0;
+	task[exit_reason_task_switch->old_task_nr]->tss.cr3  = cr3;
 
 	/* 初始化新任务的context */
 	unsigned long new_task_nr = exit_reason_task_switch->new_task_nr;
@@ -913,6 +918,12 @@ void task_switch() {
 	unsigned long new_task_esp = task[new_task_nr]->tss.esp;
 	/* 判断新任务的状态，是在内核态还是用户态(新创建的进程其task_struct.tss.cs!=0x08) */
 	if (task[new_task_nr]->tss.cs != 0x08) {
+		ltr(new_task_nr);
+		lldt(new_task_nr);
+		__asm__ (""
+				::"");
+	}
+	else {
 
 	}
 }

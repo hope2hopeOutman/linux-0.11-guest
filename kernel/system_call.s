@@ -78,10 +78,19 @@ reschedule:
 	pushl $ret_from_sys_call
 	jmp schedule
 .align 4
+/*
+   号外号外号外：
+   这里外部中断的处理都隐藏一个很大的bug，只不过现在的系统应用环境比较简单，所以没有发生相应的错误.
+   esi和edi寄存器在外部中断处理函数中应该入栈保存起来:
+   因为，如果在用户态发生大的rep字符串copy操作的话，是可以被中断的，这时如果不备份用户态的esi和edi，那么进入内核态
+   处理外部中断的过程中很有可能会用到esi和edi寄存器，当中断返回到任务的用户态继续未完成的rep字符串copy操作时，esi和
+   edi就不对了，想想看是不是这样.
+   而系统调用就没有这个问题，想想看为什么呢？
+   哈哈因为在你调用int80之前，如果有rep操作的话，肯定是先执行完rep才能执行系统调用。
+ */
 system_call:
 	cmpl $nr_system_calls-1,%eax
 	ja bad_sys_call
-
 	push %ds
 	push %es
 	push %fs
