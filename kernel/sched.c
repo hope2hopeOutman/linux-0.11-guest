@@ -32,6 +32,7 @@ unsigned long interruptible_sleep_on_semaphore = 0;
 /**************************************************************************/
 
 extern void task_exit_clear(void);
+void task_switch();
 
 void show_task(int nr,struct task_struct * p)
 {
@@ -544,7 +545,7 @@ void schedule(void)
 	 * 这样方便VMresume到GuestOS后,在task_switch中进行真正的任务切换.
 	 */
 	if (task[next] != *current) {
-		exit_reason_task_switch_struct* exit_reason_task_switch = (exit_reason_task_switch_struct*) VM_EXIT_SLEF_DEFINED_INFO_ADDR;
+		exit_reason_task_switch_struct* exit_reason_task_switch = (exit_reason_task_switch_struct*) VM_EXIT_SELF_DEFINED_INFO_ADDR;
 		exit_reason_task_switch->new_task_nr = task[next]->task_nr;
 		exit_reason_task_switch->old_task_nr = (*current)->task_nr;
 		exit_reason_task_switch->task_switch_entry = (ulong)task_switch;
@@ -903,7 +904,7 @@ void set_task_tss(unsigned long task_nr) {
  */
 void task_switch() {
 	/* 备份老任务的内核态ksp和kip到其对应task_struct.tss的esp和eip */
-	exit_reason_task_switch_struct* exit_reason_task_switch = (exit_reason_task_switch_struct*) VM_EXIT_SLEF_DEFINED_INFO_ADDR;
+	exit_reason_task_switch_struct* exit_reason_task_switch = (exit_reason_task_switch_struct*) VM_EXIT_SELF_DEFINED_INFO_ADDR;
 	ulong ldt  = task[exit_reason_task_switch->old_task_nr]->tss.ldt;
 	ulong esp0 = task[exit_reason_task_switch->old_task_nr]->tss.esp0;
 	ulong cr3  = task[exit_reason_task_switch->old_task_nr]->tss.cr3;
@@ -916,14 +917,75 @@ void task_switch() {
 	unsigned long new_task_nr = exit_reason_task_switch->new_task_nr;
 	unsigned long new_task_eip = task[new_task_nr]->tss.eip;
 	unsigned long new_task_esp = task[new_task_nr]->tss.esp;
+
+	ltr(new_task_nr);
+	lldt(new_task_nr);
 	/* 判断新任务的状态，是在内核态还是用户态(新创建的进程其task_struct.tss.cs!=0x08) */
 	if (task[new_task_nr]->tss.cs != 0x08) {
-		ltr(new_task_nr);
-		lldt(new_task_nr);
-		__asm__ (""
-				::"");
+		/* 手动恢复新进程的ds,es,fs,gs段寄存器和esi,edi */
+		__asm__ ("mov $0x17,%%ds\n\t"     \
+				 "mov $0x17,%%es\n\t"     \
+				 "mov $0x17,%%fs\n\t"     \
+				 "mov $0x17,%%gs\n\t"     \
+				 ::"S" (task[new_task_nr]->tss.esi),
+				   "D" (task[new_task_nr]->tss.edi));
+
+		/* 手动入栈ss,esp,eflags,cs和eip寄存器，为iret返回新进程的用户态执行做准备 */
+		__asm__ ("pushl $0x17\n\t" /* ss */      \
+				 "pushl %%eax\n\t" /* esp,注意:这时新进程的用户态esp是共享父进程的用户态esp且是只读，所以后面会报WP错误进入do_wp_page重新分配一个RW esp. */     \
+				 "pushfl\n\t"      /* eflgas */  \
+				 "pushl $0x0f\n\t" /* cs */      \
+				 "pushl %%ebx\n\t" /* eip */     \
+				 "pushl %%edx\n\t" /* 备份ebp */  \
+				 "movl %%ecx,%%cr3\n\t" /* cr3 */      \
+			    ::"a" (task[new_task_nr]->tss.esp),
+				  "b" (task[new_task_nr]->tss.eip),
+				  "c" (task[new_task_nr]->tss.cr3),
+				  "d" (task[new_task_nr]->tss.ebp));
+
+		/*
+		 * 恢复新进程的eax,ebx,ecx,edx和ebp寄存器，调用iret指令返回新进程的用户态执行
+		 * !!!这里一定要注意为什么在这时才更改ebp寄存器的值，那是因为GCC编译后,对局部变量的访问是通过ebp+-[n]或esp+-[n]进行的，
+		 * 如果在此之前就改变了ebp或esp的值，那么ebp变成了要被调度进程的ebp而不是当前栈的，所以访问的局部变量就不对了.
+		 */
+		__asm__ ("popl %%ebp\n\t"  \
+				 "iret\n\t"        \
+				 ::"a" (task[new_task_nr]->tss.eax),
+				   "b" (task[new_task_nr]->tss.ebx),
+				   "c" (task[new_task_nr]->tss.ecx),
+				   "d" (task[new_task_nr]->tss.edx));
 	}
 	else {
+		/*
+		 * 对于老进程的恢复，只需要还原老进程的内核栈,kip和eflags及eax,ebx,ecx,edx,esi,edi和ebp即可，其它的会在iret中恢复。
+		 * 这里有一个比较tricky的操作，将被调度任务的第一条要运行的指令的地址入栈到自己的内核栈中，想想看为什么要这样操作?
+		 * 因为要还原被调度任务的内核态上下文，就要依次还原其内核态的eflags,esi,edi,eax,ebx,ecx,edx,ebp,esp,eip
+		 * 因为是从一个任务的内核态切换到另一个任务的内核态，所以不能用iret指令一次性从当前任务的内核栈中弹出ss,esp,eflags,cs,eip
+		 * 所以，通过手工的方式还原的话，一旦更改了当前任务的内核栈为被调度的内核栈后，当前任务的内核栈就不可用了，存储在其中的
+		 * 被调用任务的eip也就访问不到了，这时调用ret指令弹出的是被调用任务的内核栈的栈顶数据，肯定是不对的，所以就有了这个比较tricky的方法O(∩_∩)O哈哈~
+		 */
 
+		ulong* kernel_stack = (ulong* )(task[new_task_nr]->tss.esp -= 4); /* 在被调度进程的内核栈中开辟4字节空间用于存储自己的eip,供后面的ret调用 */
+		*kernel_stack = task[new_task_nr]->tss.eip;
+
+		__asm__ ("pushl %%eax\n\t"  \
+				 "pushl %%ecx\n\t"  \
+				 "pushl %%edx\n\t"  \
+				 "movl %%ebx,%%cr3\n\t"  \
+				 ::"a" (task[new_task_nr]->tss.esp),
+				   "b" (task[new_task_nr]->tss.cr3),
+				   "c" (task[new_task_nr]->tss.ebp),
+				   "d" (task[new_task_nr]->tss.eflags),
+				   "S" (task[new_task_nr]->tss.esi),
+				   "D" (task[new_task_nr]->tss.edi));
+
+		__asm__ ("popfl\n\t"       \
+				 "popl %%ebp\n\t"  \
+				 "popl %%esp\n\t" /* 注意:这里一定要最后在popl esp，知道为什么了吧 */ \
+				 "ret\n\t"        /* 返回执行要被调度的任务的指令,注意:这时的esp已经是被调度任务的esp了，这时的栈顶存储的就是被调度进程的eip了 */ \
+				 ::"a" (task[new_task_nr]->tss.eax),
+				   "b" (task[new_task_nr]->tss.ebx),
+				   "c" (task[new_task_nr]->tss.ecx),
+				   "d" (task[new_task_nr]->tss.edx));
 	}
 }
