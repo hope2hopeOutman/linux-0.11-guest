@@ -546,8 +546,9 @@ void schedule(void)
 	 */
 	if (task[next] != *current) {
 		exit_reason_task_switch_struct* exit_reason_task_switch = (exit_reason_task_switch_struct*) VM_EXIT_SELF_DEFINED_INFO_ADDR;
-		exit_reason_task_switch->new_task_nr = task[next]->task_nr;
-		exit_reason_task_switch->old_task_nr = (*current)->task_nr;
+		exit_reason_task_switch->new_task_nr  = task[next]->task_nr;
+		exit_reason_task_switch->new_task_cr3 = task[next]->tss.cr3;
+		exit_reason_task_switch->old_task_nr  = (*current)->task_nr;
 		exit_reason_task_switch->task_switch_entry = (ulong)task_switch;
 	}
 
@@ -923,10 +924,11 @@ void task_switch() {
 	/* 判断新任务的状态，是在内核态还是用户态(新创建的进程其task_struct.tss.cs!=0x08) */
 	if (task[new_task_nr]->tss.cs != 0x08) {
 		/* 手动恢复新进程的ds,es,fs,gs段寄存器和esi,edi */
-		__asm__ ("mov $0x17,%%ds\n\t"     \
-				 "mov $0x17,%%es\n\t"     \
-				 "mov $0x17,%%fs\n\t"     \
-				 "mov $0x17,%%gs\n\t"     \
+		__asm__ ("movl $0x17,%%eax\n\t"   \
+				/* "movw %%ax,%%ds\n\t"     \ */
+				 "movw %%ax,%%es\n\t"     \
+				 "movw %%ax,%%fs\n\t"     \
+				 "movw %%ax,%%gs\n\t"     \
 				 ::"S" (task[new_task_nr]->tss.esi),
 				   "D" (task[new_task_nr]->tss.edi));
 
@@ -948,7 +950,11 @@ void task_switch() {
 		 * !!!这里一定要注意为什么在这时才更改ebp寄存器的值，那是因为GCC编译后,对局部变量的访问是通过ebp+-[n]或esp+-[n]进行的，
 		 * 如果在此之前就改变了ebp或esp的值，那么ebp变成了要被调度进程的ebp而不是当前栈的，所以访问的局部变量就不对了.
 		 */
-		__asm__ ("popl %%ebp\n\t"  \
+		__asm__ ("pushl %%eax\n\t" \
+				 "movl $0x17,%%eax\n\t"  \
+				 "movw %%ax,%%ds\n\t"  \
+				 "popl %%eax\n\t"  \
+				 "popl %%ebp\n\t"  \
 				 "iret\n\t"        \
 				 ::"a" (task[new_task_nr]->tss.eax),
 				   "b" (task[new_task_nr]->tss.ebx),
