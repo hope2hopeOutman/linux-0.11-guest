@@ -939,7 +939,8 @@ void task_switch() {
 				 "pushl $0x0f\n\t" /* cs */      \
 				 "pushl %%ebx\n\t" /* eip */     \
 				 "pushl %%edx\n\t" /* 备份ebp */  \
-				 "movl %%ecx,%%cr3\n\t" /* cr3 */      \
+			 /*    "movl $0x7ee1000,%%ecx\n\t"      \ */
+			     "movl %%ecx,%%cr3\n\t"           \
 			    ::"a" (task[new_task_nr]->tss.esp),
 				  "b" (task[new_task_nr]->tss.eip),
 				  "c" (task[new_task_nr]->tss.cr3),
