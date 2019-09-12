@@ -549,6 +549,7 @@ void schedule(void)
 		exit_reason_task_switch->new_task_nr  = task[next]->task_nr;
 		exit_reason_task_switch->new_task_cr3 = task[next]->tss.cr3;
 		exit_reason_task_switch->old_task_nr  = (*current)->task_nr;
+		exit_reason_task_switch->old_task_cr3 = (*current)->tss.cr3;
 		exit_reason_task_switch->task_switch_entry = (ulong)task_switch;
 	}
 
@@ -892,10 +893,6 @@ void sched_init(void)
 	set_system_gate(0x80,&system_call);
 }
 
-/* 当任务通过系统调用或中断进入内核态要设置tss.cs=0x08，这样做主要是为了区分是否是新建任务第一次运行 */
-void set_task_tss(unsigned long task_nr) {
-}
-
 /*
  * GuestOS在内核态调用该方法实现在GuestOS中进行真正的进程切换.
  * 1. 首先保存老任务执行ljmp的下一条指令的地址。
@@ -909,7 +906,7 @@ void task_switch() {
 	ulong ldt  = task[exit_reason_task_switch->old_task_nr]->tss.ldt;
 	ulong esp0 = task[exit_reason_task_switch->old_task_nr]->tss.esp0;
 	ulong cr3  = task[exit_reason_task_switch->old_task_nr]->tss.cr3;
-	task[exit_reason_task_switch->old_task_nr]->tss = exit_reason_task_switch->tss;
+	task[exit_reason_task_switch->old_task_nr]->tss = exit_reason_task_switch->old_task_tss;
 	task[exit_reason_task_switch->old_task_nr]->tss.ldt  = ldt;
 	task[exit_reason_task_switch->old_task_nr]->tss.esp0 = esp0;
 	task[exit_reason_task_switch->old_task_nr]->tss.cr3  = cr3;
@@ -934,16 +931,15 @@ void task_switch() {
 
 		/* 手动入栈ss,esp,eflags,cs和eip寄存器，为iret返回新进程的用户态执行做准备 */
 		__asm__ ("pushl $0x17\n\t" /* ss */      \
-				 "pushl %%eax\n\t" /* esp,注意:这时新进程的用户态esp是共享父进程的用户态esp且是只读，所以后面会报WP错误进入do_wp_page重新分配一个RW esp. */     \
+				 "pushl %%ecx\n\t" /* esp,注意:这时新进程的用户态esp是共享父进程的用户态esp且是只读，所以后面会报WP错误进入do_wp_page重新分配一个RW esp. */     \
 				 "pushfl\n\t"      /* eflgas */  \
 				 "pushl $0x0f\n\t" /* cs */      \
 				 "pushl %%ebx\n\t" /* eip */     \
 				 "pushl %%edx\n\t" /* 备份ebp */  \
-			 /*    "movl $0x7ee1000,%%ecx\n\t"      \ */
-			     "movl %%ecx,%%cr3\n\t"           \
-			    ::"a" (task[new_task_nr]->tss.esp),
+			     "movl %%eax,%%cr3\n\t"           \
+			    ::"c" (task[new_task_nr]->tss.esp),
 				  "b" (task[new_task_nr]->tss.eip),
-				  "c" (task[new_task_nr]->tss.cr3),
+				  "a" (task[new_task_nr]->tss.cr3),
 				  "d" (task[new_task_nr]->tss.ebp));
 
 		/*

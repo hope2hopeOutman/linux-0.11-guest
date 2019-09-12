@@ -204,23 +204,28 @@ int printf(const char *fmt, ...)
 	return i;
 }
 
+void idle_loop_in_user_mode() {
+	while (1) {
+			/* Guest OS 运行idle_loop，等待host调度一个任务，让它运行. */
+			__asm__ ("guest_loop:\n\t"            \
+					 "xorl %%eax,%%eax\n\t"       \
+					 "nop\n\t"                    \
+					 "jmp guest_loop\n\t"         \
+					 ::);
+		}
+}
+
 void init(void)
 {
 	/* 这里是task1执行的代码 */
+#if 1
 	int pid,i;
-
 	setup((void *) &drive_info);
 	(void) open("/dev/tty0",O_RDWR,2);
 	(void) dup(0);
 	(void) dup(0);
-	printf("GuestOS: %d buffers = %d bytes buffer space\n\r",NR_BUFFERS, NR_BUFFERS*BLOCK_SIZE);
-	printf("GuestOS: Free mem: %d (granularity 4k)\n\r",memory_end-main_memory_start);
-	while (1) {
-		/* Guest OS 运行idle_loop，等待host调度一个任务，让它运行. */
-		__asm__ ("guest_loop:\n\t"            \
-				 "xorl %%eax,%%eax\n\t"       \
-				 "nop\n\t"                    \
-				 "jmp guest_loop\n\t"         \
-				 ::);
-	}
+	//printf("GuestOS: %d buffers = %d bytes buffer space\n\r",NR_BUFFERS, NR_BUFFERS*BLOCK_SIZE);
+	//printf("GuestOS: Free mem: %d (granularity 4k)\n\r",memory_end-main_memory_start);
+#endif
+	idle_loop_in_user_mode();
 }

@@ -54,12 +54,17 @@ int copy_mem(int nr, struct task_struct * p) {
 	set_base(p->ldt[2], new_data_base);
 	set_limit(p->ldt[1], data_limit);
 	set_limit(p->ldt[2], data_limit);
+#if 1
 	if (copy_page_tables(old_data_base, new_data_base, data_limit, p)) {
 		//printk("copy_mem call free_page_tables before\n\r");
 		free_page_tables(new_data_base, data_limit,p);
 		//printk("copy_mem call free_page_tables after\n\r");
 		return -ENOMEM;
 	}
+#else
+	p->tss.cr3 = get_no_init_free_page(PAGE_IN_REAL_MEM_MAP);  /* 为新进程分配一页物理内存用于存储目录表 */
+	printk("new_dir=%08x\n\r",p->tss.cr3);
+#endif
 	return 0;
 }
 

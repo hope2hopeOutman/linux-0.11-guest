@@ -297,7 +297,7 @@ unsigned long compare_addr = KERNEL_LINEAR_ADDR_SPACE;
 unsigned long paging_num = PAGING_PAGES;  /* Granularity: 4K */
 unsigned long paging_end = mem_map+(PAGING_PAGES-1);
 unsigned long paging_start = LOW_MEM;     /* Granularity: Byte */
-unsigned long permanent_real_addr_mapping_space = 0x2000;   /* Granularity 4K (32M permanent real-address mapping space) */
+unsigned long permanent_real_addr_mapping_space = 0x8000;   /* Granularity 4K (32M permanent real-address mapping space) */
 
 if (memory_end > KERNEL_LINEAR_ADDR_SPACE)  /* 判断实际的物理内存是否>512M,只有>512M才会在内核空间开辟保留空间用于映射>(512M-64M)的物理内存。 */
 {
@@ -349,6 +349,61 @@ __asm__("std ; repne ; scasb\n\t"
 		"cld\n\t"
 		"lea page_lock_semaphore,%%ebx\n\t"
 		"pushl %%eax\n\t"              /* eax作为get_free_page函数的返回值,这里必须要备份一下,因为下面unlock_op函数调用会重置eax,作为返回值,即使该函数是void类型 */
+		"pushl %%ebx\n\t"
+		"call unlock_op\n\t"
+		"popl %%ebx\n\t"
+		"popl %%eax\n\t"
+		:"=a" (__res)
+		:"0" (0),"r" (paging_start),"c" (paging_num),
+		"D" (paging_end), "b" (compare_addr));
+
+/* 要在返回之前释放同步锁
+ * 在此处调用该解锁方法,GCC编译的时候有问题,会遗漏一些操作,对于这种嵌入式混合汇编,觉的GCC在处理上下文依赖关系上,还是不完善.
+ * */
+//unlock_op(&page_lock_semaphore);
+return __res;
+}
+
+unsigned long get_no_init_free_page(int real_space)
+{
+/*
+ * 首先获得同步锁，然后才能执行页面请求操作
+ * 这里还没有配置MTRR,所以page_lock_semaphore是不会缓存的，施加的是bus-lock，
+ * 后面会将共享变量设置为WB类型，这样施加的就是cacheline-lock,这样效率就高多了。
+ */
+lock_op(&page_lock_semaphore);
+
+register unsigned long __res asm("ax");
+unsigned long compare_addr = KERNEL_LINEAR_ADDR_SPACE;
+unsigned long paging_num = PAGING_PAGES;  /* Granularity: 4K */
+unsigned long paging_end = mem_map+(PAGING_PAGES-1);
+unsigned long paging_start = LOW_MEM;     /* Granularity: Byte */
+unsigned long permanent_real_addr_mapping_space = 0x2000;   /* Granularity 4K (32M permanent real-address mapping space) */
+
+if (memory_end > KERNEL_LINEAR_ADDR_SPACE)  /* 判断实际的物理内存是否>512M,只有>512M才会在内核空间开辟保留空间用于映射>(512M-64M)的物理内存。 */
+{
+	if (real_space) { /* 这里将会在分页内存区的开始8M(这个值由最大进程数确定)空间，寻找空闲页，用于存储task_struct和目录表 */
+		paging_num = permanent_real_addr_mapping_space;
+		/* 从main_memory_start开始的paging_num个物理页专用于存储进程的task_struc和dir的，这部分物理页是肯定在内核的实地址寻址空间的 */
+		paging_end = mem_map + (paging_num -1);
+	}
+	else {
+		/* 如果分配的物理页不是用于task_struct和dir, 那么要从内存的最高物理页开始查找，查找的总的物理页数不包括task_struc和dir专用的物理页。 */
+		paging_num = (PAGING_PAGES-permanent_real_addr_mapping_space);
+		paging_start += (permanent_real_addr_mapping_space<<12);
+	}
+	/* 当分配的物理页大于(1024-128)M的时候，就得remap了，才能对该物理页进行初始化操作。 */
+	compare_addr = KERNEL_LINEAR_ADDR_SPACE-KERNEL_REMAP_ADDR_SPACE;
+}
+
+__asm__("std ; repne ; scasb\n\t"
+		"jne 1f\n\t"
+		"movb $1,1(%%edi)\n\t"
+		"sall $12,%%ecx\n\t"          /* 这里自己动手挖了个大坑，差点把自己埋了，当paging_num = (PAGING_PAGES-NR_TASKS*2)时，计算地址的时候要加上NR_TASKS*2，mama */
+		"addl %2,%%ecx\n\t"
+		"1:cld\n\t"
+		"lea page_lock_semaphore,%%ebx\n\t"
+		"pushl %%ecx\n\t"              /* ecx存储get_no_init_free_page函数的返回值,这里必须要备份一下,因为下面unlock_op函数调用会重置eax,作为返回值,即使该函数是void类型 */
 		"pushl %%ebx\n\t"
 		"call unlock_op\n\t"
 		"popl %%ebx\n\t"
@@ -478,15 +533,20 @@ int copy_page_tables(unsigned long from,unsigned long to,long size,struct task_s
 {
 	struct task_struct* current = get_current_task();
 	unsigned long * from_page_table = 0;
-	ulong * kernel_from_page_table = 0;
 	unsigned long * to_page_table = 0;  /* 这两个变量也是，一定要初始化为0，凡是有++或--操作的一定要先初始化，不然栈上的old_value会是你的噩梦。 */
-	ulong * kernel_to_page_table = 0;
 	unsigned long this_page = 0;
-	ulong kernel_this_page = 0;
 	unsigned long * from_dir = 0, * to_dir = 0;
-	unsigned long nr,kernel_nr,dir_count = 0;    /* 这里dir_count一定要初始化为0，不然会有问题的，这是个巨坑啊，想想为什么一定要设置为0? */
+	unsigned long nr,dir_count = 0;    /* 这里dir_count一定要初始化为0，不然会有问题的，这是个巨坑啊，想想为什么一定要设置为0? */
 	int kernel_dir_item_num = KERNEL_LINEAR_ADDR_LIMIT / PAGE_TABLE_SIZE; /* 内核地址空间/4M得到内核占用的目录项个数 */
 	int currentIsTask0Flag = 0;
+
+#if 0
+	ulong * kernel_from_page_table = 0;
+	ulong * kernel_to_page_table = 0;
+	ulong kernel_this_page = 0;
+	ulong kernel_nr = 0;
+#endif
+
 	if (task[0] == current) {
 		currentIsTask0Flag = 1;
 	}
@@ -534,16 +594,19 @@ int copy_page_tables(unsigned long from,unsigned long to,long size,struct task_s
 		/* 读取目录项中存储的某个页表的物理地址，因为页表的地址是4K对齐的，所以要&0xfffff000擦除RWX位。 */
 		from_page_table = (unsigned long *) (0xfffff000 & *from_dir);
 		caching_linear_addr(cached_page_table_base, cached_page_table_length, check_remap_linear_addr(&from_page_table));
+#if 0
 		kernel_from_page_table = from_page_table;
-
+#endif
 		if (dir_count <= kernel_dir_item_num) {   /* 对于每个新进程来说，前面的kernel_dir_item_num个目录页是内核空间都一样的，共享task0的目录页，所以不需要分配相应的页表。 */
-		    if (!(kernel_to_page_table = (unsigned long *) get_free_page(PAGE_IN_MEM_MAP))) { /* 获取一页空闲的物理内存，用于存储要copy来自from的页表。 */
+#if 0
+			if (!(kernel_to_page_table = (unsigned long *) get_free_page(PAGE_IN_MEM_MAP))) { /* 获取一页空闲的物理内存，用于存储要copy来自from的页表。 */
 				return -1; /* Out of memory, see freeing */
 			}
-			//*to_dir = *from_dir;
 		    *to_dir = (ulong)kernel_to_page_table | 7;
 		    caching_linear_addr(cached_page_table_base,	cached_page_table_length,check_remap_linear_addr(&kernel_to_page_table));
-
+#else
+		    *to_dir = *from_dir;
+#endif
 
 			/*
 			 * 1. task0 fork task1有点特殊，因为task1在用户态运行的时候还是执行内核代码，因此要把内核空间的代码复制一份到task1的用户空间,
@@ -580,7 +643,10 @@ int copy_page_tables(unsigned long from,unsigned long to,long size,struct task_s
 		 * 这里就统一设置copy整个页表了。
 		 */
 		nr = 1024;
+
+#if 0
 		kernel_nr = 1024;
+#endif
 
         /* 注意：这里的from_page_table是一个页表的基地址，也就是第一个页表项的地址，所以通过*from_page_table取页表项中记录的物理页地址。 */
 		if (((currentIsTask0Flag && dir_count <= ((LOW_MEM+0x3fffff)>>22)) || !currentIsTask0Flag) && to_page_table) {
@@ -621,6 +687,7 @@ int copy_page_tables(unsigned long from,unsigned long to,long size,struct task_s
 			}
 		}
 
+#if 0
         /* 注意：这里的from_page_table是一个页表的基地址，也就是第一个页表项的地址，所以通过*from_page_table取页表项中记录的物理页地址。 */
 		if ((dir_count <= kernel_dir_item_num) && kernel_to_page_table) {
 			for ( ; kernel_nr-- > 0 ; kernel_from_page_table++,kernel_to_page_table++) {
@@ -636,6 +703,7 @@ int copy_page_tables(unsigned long from,unsigned long to,long size,struct task_s
 				*kernel_to_page_table = kernel_this_page;  /* 将该物理页地址copy到新分配的页表对应的页表项中。 */
 			}
 		}
+#endif
 
 		recov_swap_linear_addrs(cached_page_table_base, cached_page_table_length);
 	}
