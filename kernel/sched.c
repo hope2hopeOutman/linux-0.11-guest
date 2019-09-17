@@ -928,20 +928,38 @@ void task_switch() {
 				 "movw %%ax,%%gs\n\t"     \
 				 ::"S" (task[new_task_nr]->tss.esi),
 				   "D" (task[new_task_nr]->tss.edi));
-
-		/* 手动入栈ss,esp,eflags,cs和eip寄存器，为iret返回新进程的用户态执行做准备 */
+#if 1
+		/* 手动入栈ss,esp,eflags,cs和eip寄存器，为iret返回新进程的用户态执行做准备,共享同一个eptp实现task-switch */
 		__asm__ ("pushl $0x17\n\t" /* ss */      \
-				 "pushl %%ecx\n\t" /* esp,注意:这时新进程的用户态esp是共享父进程的用户态esp且是只读，所以后面会报WP错误进入do_wp_page重新分配一个RW esp. */     \
+				 "pushl %%eax\n\t" /* esp,注意:这时新进程的用户态esp是共享父进程的用户态esp且是只读，所以后面会报WP错误进入do_wp_page重新分配一个RW esp. */     \
 				 "pushfl\n\t"      /* eflgas */  \
 				 "pushl $0x0f\n\t" /* cs */      \
 				 "pushl %%ebx\n\t" /* eip */     \
-				 "pushl %%edx\n\t" /* 备份ebp */  \
-			     "movl %%eax,%%cr3\n\t"           \
-				 "cpuid\n\t"                      \
-			    ::"c" (task[new_task_nr]->tss.esp),
+				 "pushl %%ecx\n\t" /* 备份ebp */  \
+ 			     "movl %%cr3,%%eax\n\t"           \
+				 "movl %%eax,%%cr3\n\t"           \
+			    ::"a" (task[new_task_nr]->tss.esp),
 				  "b" (task[new_task_nr]->tss.eip),
-				  "a" (task[new_task_nr]->tss.cr3),
-				  "d" (task[new_task_nr]->tss.ebp));
+				  "c" (task[new_task_nr]->tss.ebp),
+				  "d" (task[new_task_nr]->tss.cr3));
+#else
+		/* 手动入栈ss,esp,eflags,cs和eip寄存器，为iret返回新进程的用户态执行做准备,通过eptp-switching实现task-switch */
+		__asm__ ("pushl $0x17\n\t" /* ss */      \
+				 "pushl %%eax\n\t" /* esp,注意:这时新进程的用户态esp是共享父进程的用户态esp且是只读，所以后面会报WP错误进入do_wp_page重新分配一个RW esp. */     \
+				 "pushfl\n\t"      /* eflgas */  \
+				 "pushl $0x0f\n\t" /* cs */      \
+				 "pushl %%ebx\n\t" /* eip */     \
+				 "pushl %%ecx\n\t" /* 备份ebp */  \
+				 "movl $0x00,%%eax\n\t"  /* 调用VM-FUNC的eptp-switching功能 */    \
+				 "movl $0x01,%%ecx\n\t"  /* 将当前的eptp指针替换为ept_list_addr的index=1的eptp */  \
+				 "vmfunc\n\t"                     \
+ 			     "movl %%cr3,%%eax\n\t"           \
+				 "movl %%eax,%%cr3\n\t"           \
+			    ::"a" (task[new_task_nr]->tss.esp),
+				  "b" (task[new_task_nr]->tss.eip),
+				  "c" (task[new_task_nr]->tss.ebp),
+				  "d" (task[new_task_nr]->tss.cr3));
+#endif
 
 		/*
 		 * 恢复新进程的eax,ebx,ecx,edx和ebp寄存器，调用iret指令返回新进程的用户态执行
