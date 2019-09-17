@@ -937,6 +937,7 @@ void task_switch() {
 				 "pushl %%ebx\n\t" /* eip */     \
 				 "pushl %%edx\n\t" /* 备份ebp */  \
 			     "movl %%eax,%%cr3\n\t"           \
+				 "cpuid\n\t"                      \
 			    ::"c" (task[new_task_nr]->tss.esp),
 				  "b" (task[new_task_nr]->tss.eip),
 				  "a" (task[new_task_nr]->tss.cr3),

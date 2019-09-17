@@ -54,7 +54,7 @@ int copy_mem(int nr, struct task_struct * p) {
 	set_base(p->ldt[2], new_data_base);
 	set_limit(p->ldt[1], data_limit);
 	set_limit(p->ldt[2], data_limit);
-#if 1
+#if 0
 	if (copy_page_tables(old_data_base, new_data_base, data_limit, p)) {
 		//printk("copy_mem call free_page_tables before\n\r");
 		free_page_tables(new_data_base, data_limit,p);
