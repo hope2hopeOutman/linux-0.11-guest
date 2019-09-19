@@ -32,7 +32,7 @@
 #define NULL ((void *) 0)
 #endif
 
-#define PG_DIR_ADDR 0
+#define PG_DIR_ADDR CR3_DEFAULT_GUEST_PHY_ADDR
 
 extern int copy_page_tables(unsigned long from, unsigned long to, long size, struct task_struct* new_task);
 extern int free_page_tables(unsigned long from, unsigned long size, struct task_struct* task);
