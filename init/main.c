@@ -160,6 +160,13 @@ void main(void)		/* This really IS void, no error here. */
 	}
 
 	main_memory_start = buffer_memory_end;
+#if 1
+	/* todo removed after GuestOS debug.
+	 * 16M~20M实地址映射到hostOS的内存空间，主要为了与Host kernel内存划分保持一致，
+	 * 这样main_memory_start=20M,也就是内存从20M,OS开始利用mem_map进行分页管理.
+	 */
+	main_memory_start += 0x400;
+#endif
 	PAGING_PAGES = memory_end - main_memory_start;
 	LOW_MEM      = main_memory_start*0x1000;
 	HIGH_MEMORY  = (memory_end-1)*0x1000+0xFFF;

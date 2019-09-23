@@ -299,7 +299,7 @@ int tty_write(unsigned channel, char * buf, int nr)
 {
 	/* 用户态执行printf系统调用到该方法，执行打印功能，这时要触发VM-EXIT,到host中打印. */
 	/* Cause VM-EXIT, Using host print to instead of Guest print. */
-	exit_reason_io_vedio_struct* exit_reason_io_vedio_p = (exit_reason_io_vedio_struct*) VM_EXIT_SELF_DEFINED_INFO_ADDR;
+	exit_reason_io_vedio_struct* exit_reason_io_vedio_p = (exit_reason_io_vedio_struct*) VM_EXIT_REASON_IO_INFO_ADDR;
 	exit_reason_io_vedio_p->exit_reason_no = VM_EXIT_REASON_IO_INSTRUCTION;
 	exit_reason_io_vedio_p->print_size = nr;
 	exit_reason_io_vedio_p->print_buf = buf;

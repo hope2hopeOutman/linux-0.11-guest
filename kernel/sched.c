@@ -389,6 +389,16 @@ void math_state_restore()
 	}
 }
 
+void reset_exit_reason_info(ulong next, struct task_struct ** current) {
+	exit_reason_task_switch_struct* exit_reason_task_switch = (exit_reason_task_switch_struct*) VM_EXIT_REASON_TASK_SWITCH_INFO_ADDR;
+	exit_reason_task_switch->new_task_nr  = task[next]->task_nr;
+	exit_reason_task_switch->new_task_cr3 = task[next]->tss.cr3;
+	exit_reason_task_switch->old_task_nr  = (*current)->task_nr;
+	exit_reason_task_switch->old_task_cr3 = (*current)->tss.cr3;
+	printk("new_cr3:old_cr3(%08x:%08x)\n\r", task[next]->tss.cr3, (*current)->tss.cr3);
+	exit_reason_task_switch->task_switch_entry = (ulong)task_switch;
+}
+
 /*
  *  'schedule()' is the scheduler function. This is GOOD CODE! There
  * probably won't be any reason to change this, as it should work well
@@ -545,12 +555,7 @@ void schedule(void)
 	 * 这样方便VMresume到GuestOS后,在task_switch中进行真正的任务切换.
 	 */
 	if (task[next] != *current) {
-		exit_reason_task_switch_struct* exit_reason_task_switch = (exit_reason_task_switch_struct*) VM_EXIT_SELF_DEFINED_INFO_ADDR;
-		exit_reason_task_switch->new_task_nr  = task[next]->task_nr;
-		exit_reason_task_switch->new_task_cr3 = task[next]->tss.cr3;
-		exit_reason_task_switch->old_task_nr  = (*current)->task_nr;
-		exit_reason_task_switch->old_task_cr3 = (*current)->tss.cr3;
-		exit_reason_task_switch->task_switch_entry = (ulong)task_switch;
+		reset_exit_reason_info(next, current);
 	}
 
 	switch_to(next,current);
@@ -902,7 +907,7 @@ void sched_init(void)
  */
 void task_switch() {
 	/* 备份老任务的内核态ksp和kip到其对应task_struct.tss的esp和eip */
-	exit_reason_task_switch_struct* exit_reason_task_switch = (exit_reason_task_switch_struct*) VM_EXIT_SELF_DEFINED_INFO_ADDR;
+	exit_reason_task_switch_struct* exit_reason_task_switch = (exit_reason_task_switch_struct*) VM_EXIT_REASON_TASK_SWITCH_INFO_ADDR;
 	ulong ldt  = task[exit_reason_task_switch->old_task_nr]->tss.ldt;
 	ulong esp0 = task[exit_reason_task_switch->old_task_nr]->tss.esp0;
 	ulong cr3  = task[exit_reason_task_switch->old_task_nr]->tss.cr3;
@@ -936,8 +941,7 @@ void task_switch() {
 				 "pushl $0x0f\n\t" /* cs */      \
 				 "pushl %%ebx\n\t" /* eip */     \
 				 "pushl %%ecx\n\t" /* 备份ebp */  \
- 			     "movl %%cr3,%%eax\n\t"           \
-				 "movl %%eax,%%cr3\n\t"           \
+				 "movl %%edx,%%cr3\n\t"          \
 			    ::"a" (task[new_task_nr]->tss.esp),
 				  "b" (task[new_task_nr]->tss.eip),
 				  "c" (task[new_task_nr]->tss.ebp),

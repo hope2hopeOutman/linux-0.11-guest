@@ -277,13 +277,13 @@ unsigned long caching_linear_addr(unsigned long* addr_array, int length, unsigne
  * 就应该用保留线性地址remap了，而不是>512M物理内存才需要映射，这里有个概念一定要记住：内核地址空间是512M并不代表属于内核的物理地址就有512M，
  * 这个512M的地址空间指的是线性地址空间是属于内核的，而不是物理地址。
  * 所以传给%ebx寄存器的值应该是KERNEL_LINEAR_ADDR_PAGES-LINEAR_ADDR_SWAP_PAGES，从这块物理地址开始比较，而不是从512M开始。
- * 参数real_space的值有两个：0和1
+ * 参数real_space的值有3个：0,1和2
  * 这个参数的值有意义的前提是，内存>512M,本版本规定的最大进程数为1K，一个进程占用8K(task_struct+dir)内核实地址映射的内存,总共占用8M。
- * 1:表示分配的物理页地址<(main_memory_start+8M/4K),也就是来自于mem_map开始8M部分，内核实地址映射的物理页,
- *   本系统是将进程的task_struct和目录表分配在开始的8M空间，是实地址映射的可以直接访问，不需要remap。
- * 0:表示分配的物理页来自于整个mem_map管理的内存页,可以来自于实地址或非实地址映射的物理页。
+ * 2:表示分配的物理页地址范围是(main_memory_start,    main_memory_start+4M),共4M大小,用于实地址映射GuestOS中每个进程的CR3
+ * 1:表示分配的物理页地址范围是(main_memory_start+4M,main_memory_start+36M),共32M大小,这部分内存一定是实地址映射的
+ * 0:表示分配的物理页地址范围是(main_memory_start+36M,mem_end),共(mem_end-main_memory_start-36)M大小,这部分内存是否是实地址映射，要根据总内存的大小来判定。
  */
-unsigned long get_free_page(int real_space)
+ulong get_free_page(int real_space)
 {
 /*
  * 首先获得同步锁，然后才能执行页面请求操作
@@ -292,24 +292,32 @@ unsigned long get_free_page(int real_space)
  */
 lock_op(&page_lock_semaphore);
 
-register unsigned long __res asm("ax");
-unsigned long compare_addr = KERNEL_LINEAR_ADDR_SPACE;
-unsigned long paging_num = PAGING_PAGES;  /* Granularity: 4K */
-unsigned long paging_end = mem_map+(PAGING_PAGES-1);
-unsigned long paging_start = LOW_MEM;     /* Granularity: Byte */
-unsigned long permanent_real_addr_mapping_space = 0x8000;   /* Granularity 4K (32M permanent real-address mapping space) */
+register ulong __res asm("ax");
+ulong compare_addr = KERNEL_LINEAR_ADDR_SPACE;
+ulong paging_num = PAGING_PAGES;  /* Granularity: 4K */
+ulong paging_end = mem_map+(PAGING_PAGES-1);
+ulong paging_start = LOW_MEM;     /* Granularity: Byte */
+ulong permanent_real_addr_mapping_space = 0x8000;   /* Granularity 4K (128M permanent real-address mapping space) */
+ulong permanent_real_addr_mapping_for_guest_cr3 = 0x400; /* Granularity 4K (4M permanent real-address mapping space),GuestOS中可以有最大1024个进程 */
+
 
 if (memory_end > KERNEL_LINEAR_ADDR_SPACE)  /* 判断实际的物理内存是否>512M,只有>512M才会在内核空间开辟保留空间用于映射>(512M-64M)的物理内存。 */
 {
-	if (real_space) { /* 这里将会在分页内存区的开始8M(这个值由最大进程数确定)空间，寻找空闲页，用于存储task_struct和目录表 */
-		paging_num = permanent_real_addr_mapping_space;
+	if (real_space == 2) {
+		paging_num = permanent_real_addr_mapping_for_guest_cr3;
 		/* 从main_memory_start开始的paging_num个物理页专用于存储进程的task_struc和dir的，这部分物理页是肯定在内核的实地址寻址空间的 */
 		paging_end = mem_map + (paging_num -1);
 	}
+	else if (real_space) { /* 这里将会在分页内存区的开始8M(这个值由最大进程数确定)空间，寻找空闲页，用于存储task_struct和目录表 */
+		paging_num = permanent_real_addr_mapping_space;
+		/* 从main_memory_start开始的paging_num个物理页专用于存储进程的task_struc和dir的，这部分物理页是肯定在内核的实地址寻址空间的 */
+		paging_end = mem_map + permanent_real_addr_mapping_for_guest_cr3 + (paging_num -1);
+		paging_start += (permanent_real_addr_mapping_for_guest_cr3<<12);
+	}
 	else {
 		/* 如果分配的物理页不是用于task_struct和dir, 那么要从内存的最高物理页开始查找，查找的总的物理页数不包括task_struc和dir专用的物理页。 */
-		paging_num = (PAGING_PAGES-permanent_real_addr_mapping_space);
-		paging_start += (permanent_real_addr_mapping_space<<12);
+		paging_num = (PAGING_PAGES - permanent_real_addr_mapping_space - permanent_real_addr_mapping_for_guest_cr3);
+		paging_start += ((permanent_real_addr_mapping_space + permanent_real_addr_mapping_for_guest_cr3)<<12);
 	}
 	/* 当分配的物理页大于(1024-128)M的时候，就得remap了，才能对该物理页进行初始化操作。 */
 	compare_addr = KERNEL_LINEAR_ADDR_SPACE-KERNEL_REMAP_ADDR_SPACE;
@@ -552,14 +560,16 @@ int copy_page_tables(unsigned long from,unsigned long to,long size,struct task_s
 	}
 	if ((from&0x3fffff) || (to&0x3fffff))
 		panic("copy_page_tables called with wrong alignment");
-	unsigned long *new_dir_page = (unsigned long*)get_free_page(PAGE_IN_REAL_MEM_MAP);  /* 为新进程分配一页物理内存用于存储目录表 */
+
+	unsigned long *new_dir_page = (unsigned long*)get_free_page(PAGE_IN_REAL_MEM_MAP_FOR_GUEST_CR3);  /* 为新进程分配一页物理内存用于存储目录表 */
+
 
 	printk("new_dir=%p, nr=%d, f_pid=%d, f_nr: %d\n\r",new_dir_page, new_task->task_nr, new_task->father, new_task->father_nr);
 
 	if (!new_dir_page) {
 		panic("Can not allocate a physical page for new process's dir-table. \n\r ");
 	}
-	new_task->tss.cr3 = (long)new_dir_page;
+	new_task->tss.cr3 = (ulong)new_dir_page;
 	/*
 	 * V1: 内核pg_dir = 0，用户pg_dir存储在task_struct中，计算该from线性地址所在的目录项，也就是落在那个页表中。
 	 *     因为这段代码是在内核态运行的，内核基地址base=0，所以current->dir_addr+目录项offset得到的就是目录项的实际物理地址。

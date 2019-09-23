@@ -35,7 +35,7 @@ int printk(const char *fmt, ...)
 	va_end(args);
 
 	/* Cause VM-EXIT, Using host print to instead of Guest print. */
-	exit_reason_io_vedio_struct* exit_reason_io_vedio_p = (exit_reason_io_vedio_struct*) VM_EXIT_SELF_DEFINED_INFO_ADDR;
+	exit_reason_io_vedio_struct* exit_reason_io_vedio_p = (exit_reason_io_vedio_struct*) VM_EXIT_REASON_IO_INFO_ADDR;
 	exit_reason_io_vedio_p->exit_reason_no = VM_EXIT_REASON_IO_INSTRUCTION;
 	exit_reason_io_vedio_p->print_size = i;
 	exit_reason_io_vedio_p->print_buf = print_buf;
