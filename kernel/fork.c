@@ -83,6 +83,8 @@ int copy_process(int nr, long ebp, long edi, long esi, long gs, long none,
 		long cs, long eflags, long esp, long ss) {
 
 	struct task_struct* current = get_current_task();
+	printk("current: %p, eflags: %08x, nr=%08x\n\r", current, eflags,nr);
+	current->tss.eflags = eflags;
 	struct task_struct *p = task[nr];
 	int i;
 	struct file *f;

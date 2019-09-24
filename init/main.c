@@ -185,7 +185,6 @@ void main(void)		/* This really IS void, no error here. */
 	hd_init();
 	printk("GuestOS: mem_size: %u (granularity 4K) \n\r", memory_end);  /* 知道print函数为甚么必须在这里才有效吗嘿嘿。 */
 	sti();
-	init_tasks();
 	move_to_user_mode();
 	if (!fork()) {		/* we count on this going ok */
 		init();

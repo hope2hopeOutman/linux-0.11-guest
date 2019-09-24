@@ -145,7 +145,7 @@ int sys_setup(void * BIOS)
 		if (!(bh = bread(0x300 + drive*5,0))) {
 			printk("Unable to read partition table of drive %d\n\r",
 				drive);
-			panic("");
+			panic("Unable to read partition table of drive\n\r");
 		}
 		if (bh->b_data[510] != 0x55 || (unsigned char)
 		    bh->b_data[511] != 0xAA) {

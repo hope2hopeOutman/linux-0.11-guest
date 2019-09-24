@@ -548,13 +548,6 @@ int copy_page_tables(unsigned long from,unsigned long to,long size,struct task_s
 	int kernel_dir_item_num = KERNEL_LINEAR_ADDR_LIMIT / PAGE_TABLE_SIZE; /* 内核地址空间/4M得到内核占用的目录项个数 */
 	int currentIsTask0Flag = 0;
 
-#if 0
-	ulong * kernel_from_page_table = 0;
-	ulong * kernel_to_page_table = 0;
-	ulong kernel_this_page = 0;
-	ulong kernel_nr = 0;
-#endif
-
 	if (task[0] == current) {
 		currentIsTask0Flag = 1;
 	}
@@ -604,19 +597,10 @@ int copy_page_tables(unsigned long from,unsigned long to,long size,struct task_s
 		/* 读取目录项中存储的某个页表的物理地址，因为页表的地址是4K对齐的，所以要&0xfffff000擦除RWX位。 */
 		from_page_table = (unsigned long *) (0xfffff000 & *from_dir);
 		caching_linear_addr(cached_page_table_base, cached_page_table_length, check_remap_linear_addr(&from_page_table));
-#if 0
-		kernel_from_page_table = from_page_table;
-#endif
+
 		if (dir_count <= kernel_dir_item_num) {   /* 对于每个新进程来说，前面的kernel_dir_item_num个目录页是内核空间都一样的，共享task0的目录页，所以不需要分配相应的页表。 */
-#if 0
-			if (!(kernel_to_page_table = (unsigned long *) get_free_page(PAGE_IN_MEM_MAP))) { /* 获取一页空闲的物理内存，用于存储要copy来自from的页表。 */
-				return -1; /* Out of memory, see freeing */
-			}
-		    *to_dir = (ulong)kernel_to_page_table | 7;
-		    caching_linear_addr(cached_page_table_base,	cached_page_table_length,check_remap_linear_addr(&kernel_to_page_table));
-#else
+
 		    *to_dir = *from_dir;
-#endif
 
 			/*
 			 * 1. task0 fork task1有点特殊，因为task1在用户态运行的时候还是执行内核代码，因此要把内核空间的代码复制一份到task1的用户空间,
@@ -653,10 +637,6 @@ int copy_page_tables(unsigned long from,unsigned long to,long size,struct task_s
 		 * 这里就统一设置copy整个页表了。
 		 */
 		nr = 1024;
-
-#if 0
-		kernel_nr = 1024;
-#endif
 
         /* 注意：这里的from_page_table是一个页表的基地址，也就是第一个页表项的地址，所以通过*from_page_table取页表项中记录的物理页地址。 */
 		if (((currentIsTask0Flag && dir_count <= ((LOW_MEM+0x3fffff)>>22)) || !currentIsTask0Flag) && to_page_table) {
@@ -696,24 +676,6 @@ int copy_page_tables(unsigned long from,unsigned long to,long size,struct task_s
 				}
 			}
 		}
-
-#if 0
-        /* 注意：这里的from_page_table是一个页表的基地址，也就是第一个页表项的地址，所以通过*from_page_table取页表项中记录的物理页地址。 */
-		if ((dir_count <= kernel_dir_item_num) && kernel_to_page_table) {
-			for ( ; kernel_nr-- > 0 ; kernel_from_page_table++,kernel_to_page_table++) {
-				kernel_this_page = *kernel_from_page_table;   /* 这里的this_page页表项记录的是物理页地址。 */
-				if (!(1 & kernel_this_page))           /* 判断该物理页是否存在。 */
-					continue;
-				//if (this_page >= LOW_MEM) { /* 注意：前1G的内核地址空间对应的目录项一定不要设置为只读，这里是对于新进程的,对于所有fork操作。 */
-				kernel_this_page &= (~0xFFF);   /* 对于子进程来说，内核页表项都设置为RWX。 */
-				kernel_this_page |= 7;
-
-				//}
-				/* 将即将共享的页表项设置为只读。 */
-				*kernel_to_page_table = kernel_this_page;  /* 将该物理页地址copy到新分配的页表对应的页表项中。 */
-			}
-		}
-#endif
 
 		recov_swap_linear_addrs(cached_page_table_base, cached_page_table_length);
 	}
