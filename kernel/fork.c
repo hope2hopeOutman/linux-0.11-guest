@@ -100,6 +100,7 @@ int copy_process(int nr, long ebp, long edi, long esi, long gs, long none,
 	 *  */
 	*p = *current; /* NOTE! this doesn't copy the supervisor stack */
 	p->state = TASK_UNINTERRUPTIBLE;
+    p->executed = 0;  /* 这里一定要设置为还没执行过，因为其父进程肯定都是执行过的 */
 	unlock_op(&sched_semaphore);
 
 	p->task_nr = nr;

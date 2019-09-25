@@ -135,12 +135,14 @@ struct task_struct {
 	int sched_on_ap;  /* 1: running on AP, 0: not */
 	int task_nr;
 	int father_nr;
+	ulong executed;  /* 1:被执行过,0: 还没有被执行过 */
 };
 
 typedef struct exit_reason_task_switch_struct {
 	ulong  task_switch_entry;        /* VM  set, only used by VMM  */
 	ulong  new_task_nr;              /* VM  set, only used by VM   */
 	ulong  new_task_cr3;             /* VM  set, only used by VMM  */
+	ulong  new_task_executed;        /* VM  set, only used by VMM  */
 	ulong  old_task_nr;              /* VM  set, only used by VM   */
 	ulong  old_task_cr3;             /* VM  set, only used by VMM  */
 	struct tss_struct old_task_tss;  /* VMM set, only used by VM   */
@@ -176,7 +178,9 @@ typedef struct exit_reason_task_switch_struct {
 	 _LDT(0),0x80000000, \
 		{} \
 	}, \
-/*sched_on_ap=0，表示没有AP运行该task，可以被调度到AP上运行*/ 0 \
+/*sched_on_ap=0，表示没有AP运行该task，可以被调度到AP上运行*/ 0, \
+    0,0, \
+/* task0是一定要被执行的，所以这里默认设置为1 */	1 \
 }
 
 union task_union {

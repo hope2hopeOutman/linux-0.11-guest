@@ -368,6 +368,7 @@ void reset_exit_reason_info(ulong next, struct task_struct ** current) {
 	exit_reason_task_switch_struct* exit_reason_task_switch = (exit_reason_task_switch_struct*) VM_EXIT_REASON_TASK_SWITCH_INFO_ADDR;
 	exit_reason_task_switch->new_task_nr  = task[next]->task_nr;
 	exit_reason_task_switch->new_task_cr3 = task[next]->tss.cr3;
+	exit_reason_task_switch->new_task_executed = task[next]->executed;
 	exit_reason_task_switch->old_task_nr  = (*current)->task_nr;
 	exit_reason_task_switch->old_task_cr3 = (*current)->tss.cr3;
 	printk("new_cr3:old_cr3(%08x:%08x)\n\r", task[next]->tss.cr3, (*current)->tss.cr3);
@@ -899,6 +900,11 @@ void task_switch() {
 	unsigned long new_task_nr = exit_reason_task_switch->new_task_nr;
 	unsigned long new_task_eip = task[new_task_nr]->tss.eip;
 	unsigned long new_task_esp = task[new_task_nr]->tss.esp;
+	/*
+	 * 这里一定要设置新任务的tss.executed=1,因为这时新任务的guest-cr3-shadow的目录表结构肯定是初始化过了，
+	 * 所以这里可以设置该标志.
+     */
+	task[new_task_nr]->executed = 1;
 
 	ltr(new_task_nr);
 	lldt(new_task_nr);
@@ -920,7 +926,7 @@ void task_switch() {
 				 "pushl $0x0f\n\t" /* cs */      \
 				 "pushl %%ebx\n\t" /* eip */     \
 				 "pushl %%ecx\n\t" /* 备份ebp */  \
-				 "movl %%edx,%%cr3\n\t"          \
+				 "movl %%edx,%%cr3\n\t"           \
 			    ::"a" (task[new_task_nr]->tss.esp),
 				  "b" (task[new_task_nr]->tss.eip),
 				  "c" (task[new_task_nr]->tss.ebp),
@@ -943,18 +949,17 @@ void task_switch() {
 				  "c" (task[new_task_nr]->tss.ebp),
 				  "d" (task[new_task_nr]->tss.cr3));
 #endif
-
 		/*
 		 * 恢复新进程的eax,ebx,ecx,edx和ebp寄存器，调用iret指令返回新进程的用户态执行
 		 * !!!这里一定要注意为什么在这时才更改ebp寄存器的值，那是因为GCC编译后,对局部变量的访问是通过ebp+-[n]或esp+-[n]进行的，
 		 * 如果在此之前就改变了ebp或esp的值，那么ebp变成了要被调度进程的ebp而不是当前栈的，所以访问的局部变量就不对了.
 		 */
-		__asm__ ("pushl %%eax\n\t" \
+		__asm__ ("pushl %%eax\n\t"       \
 				 "movl $0x17,%%eax\n\t"  \
-				 "movw %%ax,%%ds\n\t"  \
-				 "popl %%eax\n\t"  \
-				 "popl %%ebp\n\t"  \
-				 "iret\n\t"        \
+				 "movw %%ax,%%ds\n\t"    \
+				 "popl %%eax\n\t"        \
+				 "popl %%ebp\n\t"        \
+				 "iret\n\t"              \
 				 ::"a" (task[new_task_nr]->tss.eax),
 				   "b" (task[new_task_nr]->tss.ebx),
 				   "c" (task[new_task_nr]->tss.ecx),

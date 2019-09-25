@@ -257,7 +257,7 @@ static void bad_rw_intr(void)
 		reset = 1;
 }
 
-static void read_intr(void)
+void read_intr(void)
 {
 	if (win_result()) {
 		bad_rw_intr();
@@ -282,7 +282,7 @@ static void read_intr(void)
 	do_hd_request();
 }
 
-static void write_intr(void)
+void write_intr(void)
 {
 	if (win_result()) {
 		bad_rw_intr();
