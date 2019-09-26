@@ -199,13 +199,20 @@ void main(void)		/* This really IS void, no error here. */
 	for(;;) pause();
 }
 
+void print_count() {
+	for (int i=0;i<10;i++) {
+		__asm__ ("nop"::);
+	}
+}
+
 int printf(const char *fmt, ...)
 {
 	va_list args;
 	int i;
-
 	va_start(args, fmt);
-	write(1,user_print_buf,i=vsprintf(user_print_buf, fmt, args));
+	i=vsprintf(user_print_buf, fmt, args);
+	print_count();
+	write(1,user_print_buf,i);
 	va_end(args);
 	return i;
 }
@@ -224,14 +231,14 @@ void idle_loop_in_user_mode() {
 void init(void)
 {
 	/* 这里是task1执行的代码 */
-#if 1
+
 	int pid,i;
 	setup((void *) &drive_info);
 	(void) open("/dev/tty0",O_RDWR,2);
 	(void) dup(0);
 	(void) dup(0);
-	//printf("GuestOS: %d buffers = %d bytes buffer space\n\r",NR_BUFFERS, NR_BUFFERS*BLOCK_SIZE);
-	//printf("GuestOS: Free mem: %d (granularity 4k)\n\r",memory_end-main_memory_start);
-#endif
+	print_count();
+	printf("GuestOS: %d buffers = %d bytes buffer space\n\r",NR_BUFFERS, NR_BUFFERS*BLOCK_SIZE);
+	printf("GuestOS: Free mem: %d (granularity 4k)\n\r",memory_end-main_memory_start);
 	idle_loop_in_user_mode();
 }

@@ -372,61 +372,6 @@ __asm__("std ; repne ; scasb\n\t"
 return __res;
 }
 
-unsigned long get_no_init_free_page(int real_space)
-{
-/*
- * 首先获得同步锁，然后才能执行页面请求操作
- * 这里还没有配置MTRR,所以page_lock_semaphore是不会缓存的，施加的是bus-lock，
- * 后面会将共享变量设置为WB类型，这样施加的就是cacheline-lock,这样效率就高多了。
- */
-lock_op(&page_lock_semaphore);
-
-register unsigned long __res asm("ax");
-unsigned long compare_addr = KERNEL_LINEAR_ADDR_SPACE;
-unsigned long paging_num = PAGING_PAGES;  /* Granularity: 4K */
-unsigned long paging_end = mem_map+(PAGING_PAGES-1);
-unsigned long paging_start = LOW_MEM;     /* Granularity: Byte */
-unsigned long permanent_real_addr_mapping_space = 0x8000;   /* Granularity 4K (32M permanent real-address mapping space) */
-
-if (memory_end > KERNEL_LINEAR_ADDR_SPACE)  /* 判断实际的物理内存是否>512M,只有>512M才会在内核空间开辟保留空间用于映射>(512M-64M)的物理内存。 */
-{
-	if (real_space) { /* 这里将会在分页内存区的开始8M(这个值由最大进程数确定)空间，寻找空闲页，用于存储task_struct和目录表 */
-		paging_num = permanent_real_addr_mapping_space;
-		/* 从main_memory_start开始的paging_num个物理页专用于存储进程的task_struc和dir的，这部分物理页是肯定在内核的实地址寻址空间的 */
-		paging_end = mem_map + (paging_num -1);
-	}
-	else {
-		/* 如果分配的物理页不是用于task_struct和dir, 那么要从内存的最高物理页开始查找，查找的总的物理页数不包括task_struc和dir专用的物理页。 */
-		paging_num = (PAGING_PAGES-permanent_real_addr_mapping_space);
-		paging_start += (permanent_real_addr_mapping_space<<12);
-	}
-	/* 当分配的物理页大于(1024-128)M的时候，就得remap了，才能对该物理页进行初始化操作。 */
-	compare_addr = KERNEL_LINEAR_ADDR_SPACE-KERNEL_REMAP_ADDR_SPACE;
-}
-
-__asm__("std ; repne ; scasb\n\t"
-		"jne 1f\n\t"
-		"movb $1,1(%%edi)\n\t"
-		"sall $12,%%ecx\n\t"          /* 这里自己动手挖了个大坑，差点把自己埋了，当paging_num = (PAGING_PAGES-NR_TASKS*2)时，计算地址的时候要加上NR_TASKS*2，mama */
-		"addl %2,%%ecx\n\t"
-		"1:cld\n\t"
-		"lea page_lock_semaphore,%%ebx\n\t"
-		"pushl %%ecx\n\t"              /* ecx存储get_no_init_free_page函数的返回值,这里必须要备份一下,因为下面unlock_op函数调用会重置eax,作为返回值,即使该函数是void类型 */
-		"pushl %%ebx\n\t"
-		"call unlock_op\n\t"
-		"popl %%ebx\n\t"
-		"popl %%eax\n\t"
-		:"=a" (__res)
-		:"0" (0),"r" (paging_start),"c" (paging_num),
-		"D" (paging_end), "b" (compare_addr));
-
-/* 要在返回之前释放同步锁
- * 在此处调用该解锁方法,GCC编译的时候有问题,会遗漏一些操作,对于这种嵌入式混合汇编,觉的GCC在处理上下文依赖关系上,还是不完善.
- * */
-//unlock_op(&page_lock_semaphore);
-return __res;
-}
-
 /*
  * Free a page of memory at physical address 'addr'. Used by
  * 'free_page_tables()'

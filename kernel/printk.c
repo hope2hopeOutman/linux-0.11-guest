@@ -38,7 +38,7 @@ int printk(const char *fmt, ...)
 	exit_reason_io_vedio_struct* exit_reason_io_vedio_p = (exit_reason_io_vedio_struct*) VM_EXIT_REASON_IO_INFO_ADDR;
 	exit_reason_io_vedio_p->exit_reason_no = VM_EXIT_REASON_IO_INSTRUCTION;
 	exit_reason_io_vedio_p->print_size = i;
-	exit_reason_io_vedio_p->print_buf = print_buf;
+	exit_reason_io_vedio_p->print_buf = print_buf;  /* 内核的ds.base=cs.base=0x00 */
 	cli();
 	outb_p(14, video_port_reg);
 	sti();

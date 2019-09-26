@@ -297,19 +297,44 @@ int tty_read(unsigned channel, char * buf, int nr)
 
 int tty_write(unsigned channel, char * buf, int nr)
 {
-	/* 用户态执行printf系统调用到该方法，执行打印功能，这时要触发VM-EXIT,到host中打印. */
-	/* Cause VM-EXIT, Using host print to instead of Guest print. */
+	/* 用户态执行printf系统调用到该方法，执行打印功能，这时要触发VM-EXIT,到host中打印.
+	 * Cause VM-EXIT, Using host print to instead of Guest print.
+	 * printk方法是走不到这里的，能执行到这里一定是在内核态执行了printf方法
+	 * 我们知道在fork新进程的时候，是将内核代码和数据区都设置为RO状态了，所以printf中对user_print_buf写操作会触发WP,
+	 * 进而为它分配一个新的物理页，所以这里user_print_buf的地址必须加上用户态DS的基地址，形成完整的linear-addr传给VMM,
+	 * VMM通过EPT表得到其实际映射的物理地址，才能打印处正确的数据，尼玛巨坑啊，又是排查了一天。
+	 *
+	 * 举例说明最清楚了：
+	 * user_print_buf base_addr=0xc80040，将该值赋值给exit_reason_io_vedio_p->print_buf = buf，VMM直接取该地址处的值为空。
+	 * 所以要加上DS(user_mode) base: 0x40000000 + 0xc80040
+	 * CR2=40c80040(linear-addr)  0100000011 0010000000 000001000000
+     *   1. 通过CR3中存储guest-phy-add,经过EPT-page-structure转换可以得到，该40c80000(linear-addr page)所在的页表的guest-phy-addr = 0x7fffc000
+     *   2. guest-phy-addr = 0x7fffc000 再经过EPT-page-structure转换可以得到其实际物理地址phy-addr=0x08add000
+     *   3. 取该地址处(0x08add000+0010000000b*4)的值，就得到了40c80000该线性页对应的guest-phy-addr地址了(guest-page-addr=0x7fff9000)
+     *   4. guest-page-addr=0x7fff9000还要再次经过经过EPT-page-structure转化就得到实际的物理页:0x08ada000
+     *
+     *   (gdb) x /32wx 0x08ada000
+				0x8ada000:      0x00000000      0x00000000      0x00000000      0x00000000
+				0x8ada010:      0x00000000      0x00000000      0x00000000      0x00000000
+				0x8ada020:      0x7fffffff      0x01400000      0x0007ec00      0x00001400
+				0x8ada030:      0x00001000      0x00080000      0x00000000      0x00000000
+                页内offset=000001000000=0x40处才是在用户态实际要打印的数据啊，尼玛我容易吗哈哈
+				0x8ada040:      0x73657547      0x3a534f74      0x32343220      0x75622039
+				0x8ada050:      0x72656666      0x203d2073      0x37383432      0x20363932
+				0x8ada060:      0x65747962      0x75622073      0x72656666      0x61707320
+				0x8ada070:      0x0d0a6563      0x00000000      0x00000000      0x00000000
+	 */
+	struct task_struct* current = get_current_task();
 	exit_reason_io_vedio_struct* exit_reason_io_vedio_p = (exit_reason_io_vedio_struct*) VM_EXIT_REASON_IO_INFO_ADDR;
 	exit_reason_io_vedio_p->exit_reason_no = VM_EXIT_REASON_IO_INSTRUCTION;
 	exit_reason_io_vedio_p->print_size = nr;
-	exit_reason_io_vedio_p->print_buf = buf;
+	exit_reason_io_vedio_p->print_buf = buf + get_base(current->ldt[2]); /* 这了一定要加上ds.base */
 	cli();
 	outb_p(14, video_port_reg);  /* 触发VM-EXIT */
 	sti();
 	return nr;
 
 	int lock_flag = 1;  /* 加锁成功了，设置为1 */
-	struct task_struct* current = get_current_task();
 	static cr_flag=0;
 	struct tty_struct * tty;
 	char c, *b=buf;

@@ -371,7 +371,7 @@ void reset_exit_reason_info(ulong next, struct task_struct ** current) {
 	exit_reason_task_switch->new_task_executed = task[next]->executed;
 	exit_reason_task_switch->old_task_nr  = (*current)->task_nr;
 	exit_reason_task_switch->old_task_cr3 = (*current)->tss.cr3;
-	printk("new_cr3:old_cr3(%08x:%08x)\n\r", task[next]->tss.cr3, (*current)->tss.cr3);
+	//printk("new_cr3:old_cr3(%08x:%08x)\n\r", task[next]->tss.cr3, (*current)->tss.cr3);
 	exit_reason_task_switch->task_switch_entry = (ulong)task_switch;
 }
 
