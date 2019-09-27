@@ -14,18 +14,17 @@
 #include <errno.h>
 #include <signal.h>
 #include <linux/head.h>
+#include <linux/sched.h>
+#include <linux/tty.h>
+#include <asm/segment.h>
+#include <asm/system.h>
+#include <asm/io.h>
 
 #define ALRMMASK (1<<(SIGALRM-1))
 #define KILLMASK (1<<(SIGKILL-1))
 #define INTMASK (1<<(SIGINT-1))
 #define QUITMASK (1<<(SIGQUIT-1))
 #define TSTPMASK (1<<(SIGTSTP-1))
-
-#include <linux/sched.h>
-#include <linux/tty.h>
-#include <asm/segment.h>
-#include <asm/system.h>
-#include <asm/io.h>
 
 #define _L_FLAG(tty,f)	((tty)->termios.c_lflag & f)
 #define _I_FLAG(tty,f)	((tty)->termios.c_iflag & f)
@@ -300,6 +299,7 @@ int tty_write(unsigned channel, char * buf, int nr)
 	/* 用户态执行printf系统调用到该方法，执行打印功能，这时要触发VM-EXIT,到host中打印.
 	 * Cause VM-EXIT, Using host print to instead of Guest print.
 	 * printk方法是走不到这里的，能执行到这里一定是在内核态执行了printf方法
+	 *
 	 * 我们知道在fork新进程的时候，是将内核代码和数据区都设置为RO状态了，所以printf中对user_print_buf写操作会触发WP,
 	 * 进而为它分配一个新的物理页，所以这里user_print_buf的地址必须加上用户态DS的基地址，形成完整的linear-addr传给VMM,
 	 * VMM通过EPT表得到其实际映射的物理地址，才能打印处正确的数据，尼玛巨坑啊，又是排查了一天。
@@ -353,6 +353,12 @@ int tty_write(unsigned channel, char * buf, int nr)
 		if (current && current->signal)
 			break;
 		while (nr>0 && !FULL(tty->write_q)) {
+			/*
+			 * 这里还是有必要解释一下的:
+			 * 对于printf方法：因为要打印的内容来源于用户态，所以这时fs指向的是用户态的选择子.
+			 * 对于printk方法: 因为要打印的内容来源于内核态，所以这时fs指向的是内核态的选择子.
+			 * 这样就是为什么上面的exit_reason_io_vedio_p一定要加上用户态的ds.base才能正确访问用户态的数据.
+			 */
 			c=get_fs_byte(b);
 			if (O_POST(tty)) {
 				if (c=='\r' && O_CRNL(tty))

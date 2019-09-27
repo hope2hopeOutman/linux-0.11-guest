@@ -15,6 +15,7 @@
 #include <linux/head.h>
 #include <linux/kernel.h>
 #include <asm/io.h>
+#include <linux/sched.h>
 
 char print_buf[1024];
 
@@ -38,7 +39,7 @@ int printk(const char *fmt, ...)
 	exit_reason_io_vedio_struct* exit_reason_io_vedio_p = (exit_reason_io_vedio_struct*) VM_EXIT_REASON_IO_INFO_ADDR;
 	exit_reason_io_vedio_p->exit_reason_no = VM_EXIT_REASON_IO_INSTRUCTION;
 	exit_reason_io_vedio_p->print_size = i;
-	exit_reason_io_vedio_p->print_buf = print_buf;  /* 内核的ds.base=cs.base=0x00 */
+	exit_reason_io_vedio_p->print_buf = print_buf + get_base(gdt[2]);  /* 这里要加上内核的ds.base=cs.base形成完整的linear-addr(如果内核base不为0的话) */
 	cli();
 	outb_p(14, video_port_reg);
 	sti();

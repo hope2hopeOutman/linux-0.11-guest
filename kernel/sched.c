@@ -375,6 +375,10 @@ void reset_exit_reason_info(ulong next, struct task_struct ** current) {
 	exit_reason_task_switch->task_switch_entry = (ulong)task_switch;
 }
 
+void schedule_break_point() {
+	for (int i =0;i<3;i++);
+}
+
 /*
  *  'schedule()' is the scheduler function. This is GOOD CODE! There
  * probably won't be any reason to change this, as it should work well
@@ -438,6 +442,8 @@ void schedule(void)
 			}
 		}
 	}
+
+#if 0
 
 	if (current_apic_id == apic_ids[0].apic_id) {  /* 调度任务发生在BSP上 */
 #if 0
@@ -521,6 +527,10 @@ void schedule(void)
 		}
 #endif
 	}
+
+#endif
+
+	schedule_break_point();
 	if (lock_flag) {
 		unlock_op(&sched_semaphore);
 		lock_flag = 0;
@@ -531,6 +541,7 @@ void schedule(void)
 	 * 这样方便VMresume到GuestOS后,在task_switch中进行真正的任务切换.
 	 */
 	if (task[next] != *current) {
+		printk("Selected.nr====%08x\n\r", next);
 		reset_exit_reason_info(next, current);
 	}
 

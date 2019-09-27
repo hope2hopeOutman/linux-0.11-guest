@@ -199,19 +199,12 @@ void main(void)		/* This really IS void, no error here. */
 	for(;;) pause();
 }
 
-void print_count() {
-	for (int i=0;i<10;i++) {
-		__asm__ ("nop"::);
-	}
-}
-
 int printf(const char *fmt, ...)
 {
 	va_list args;
 	int i;
 	va_start(args, fmt);
 	i=vsprintf(user_print_buf, fmt, args);
-	print_count();
 	write(1,user_print_buf,i);
 	va_end(args);
 	return i;
@@ -223,10 +216,14 @@ void idle_loop_in_user_mode() {
 			__asm__ ("guest_loop:\n\t"            \
 					 "xorl %%eax,%%eax\n\t"       \
 					 "nop\n\t"                    \
+					 "call schedule\n\t"          \
 					 "jmp guest_loop\n\t"         \
 					 ::);
 		}
 }
+
+static char * argv[] = { NULL,NULL };
+static char * envp[] = { "HOME=/usr/root", NULL };
 
 void init(void)
 {
@@ -237,8 +234,22 @@ void init(void)
 	(void) open("/dev/tty0",O_RDWR,2);
 	(void) dup(0);
 	(void) dup(0);
-	print_count();
+
 	printf("GuestOS: %d buffers = %d bytes buffer space\n\r",NR_BUFFERS, NR_BUFFERS*BLOCK_SIZE);
 	printf("GuestOS: Free mem: %d (granularity 4k)\n\r",memory_end-main_memory_start);
+
+	if ((pid=fork()) < 0) {
+		printf("Fork failed in init\n\r");
+	}
+
+	if (!pid) {
+		close(0);close(1);close(2);
+		//setsid();
+		(void) open("/dev/tty0",O_RDWR,2);
+		(void) dup(0);
+		(void) dup(0);
+		_exit(execve("/usr/root/a.out",argv,envp));
+	}
+
 	idle_loop_in_user_mode();
 }
