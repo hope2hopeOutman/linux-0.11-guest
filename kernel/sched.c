@@ -428,8 +428,10 @@ void schedule(void)
 		i = NR_TASKS;
 		p = &task[NR_TASKS];
 		while (--i) {
-			if (!*--p)
+			if (!*--p) {
+				//printk("task[state:%u],[counter:%u],[priority:%u]\n\r", (*p)->state,(*p)->counter,(*p)->priority);
 				continue;
+			}
 			if ((*p)->state == TASK_RUNNING && (*p)->counter > c && (*p)->sched_on_ap == 0) {
 				c = (*p)->counter, next = i;
 			}

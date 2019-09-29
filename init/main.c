@@ -250,6 +250,11 @@ void init(void)
 		(void) dup(0);
 		_exit(execve("/usr/root/a.out",argv,envp));
 	}
+	else {
+		for(;;) pause();
+	}
 
+#if 0
 	idle_loop_in_user_mode();
+#endif
 }

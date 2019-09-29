@@ -241,6 +241,11 @@ int do_execve(unsigned long * eip,long tmp,char * filename,
 	int sh_bang = 0;
 	unsigned long p=PAGE_SIZE*MAX_ARG_PAGES-4;
 
+	char keystr[32] = { 0 };
+	cpy_str_to_kernel(keystr, filename);
+	printk("execute.filename: %s\n\r", keystr);
+
+
 	/*
 	 * 这里eip指向的是进程的"用户态EIP"存储在内核栈中的地址，eip[1]=*(eip+1)，
 	 * 我们知道发生中断时CPU会自动保存5个寄存器的值到栈中，入栈顺序是ss,esp,eflags,cs,eip,
