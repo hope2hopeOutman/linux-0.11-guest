@@ -375,10 +375,6 @@ void reset_exit_reason_info(ulong next, struct task_struct ** current) {
 	exit_reason_task_switch->task_switch_entry = (ulong)task_switch;
 }
 
-void schedule_break_point() {
-	for (int i =0;i<3;i++);
-}
-
 /*
  *  'schedule()' is the scheduler function. This is GOOD CODE! There
  * probably won't be any reason to change this, as it should work well
@@ -415,9 +411,9 @@ void schedule(void)
 					(*p)->signal |= (1<<(SIGALRM-1));
 					(*p)->alarm = 0;
 			}
-			if (((*p)->signal & ~(_BLOCKABLE & (*p)->blocked)) &&
-			(*p)->state==TASK_INTERRUPTIBLE)
+			if (((*p)->signal & ~(_BLOCKABLE & (*p)->blocked)) && (*p)->state==TASK_INTERRUPTIBLE) {  /* 一旦父进程收到非阻塞信号后,就唤醒该进程. */
 				(*p)->state=TASK_RUNNING;
+			}
 		}
 
 /* this is the scheduler proper: */
@@ -429,14 +425,13 @@ void schedule(void)
 		p = &task[NR_TASKS];
 		while (--i) {
 			if (!*--p) {
-				//printk("task[state:%u],[counter:%u],[priority:%u]\n\r", (*p)->state,(*p)->counter,(*p)->priority);
 				continue;
 			}
 			if ((*p)->state == TASK_RUNNING && (*p)->counter > c && (*p)->sched_on_ap == 0) {
 				c = (*p)->counter, next = i;
 			}
 		}
-		if (c) break;
+		if (c) break; /* 当所有进程都被设置为TASK_INTERRUPTIBLE状态时,task0就开始被调度执行了这时c=-1 */
 		for(p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
 			if (*p) {
 				/* 此时如果release其他AP执行介于这之间的话,是会有问题的.具体看release描述. */
@@ -532,7 +527,6 @@ void schedule(void)
 
 #endif
 
-	schedule_break_point();
 	if (lock_flag) {
 		unlock_op(&sched_semaphore);
 		lock_flag = 0;
@@ -543,7 +537,7 @@ void schedule(void)
 	 * 这样方便VMresume到GuestOS后,在task_switch中进行真正的任务切换.
 	 */
 	if (task[next] != *current) {
-		printk("Selected.nr====%08x\n\r", next);
+		//printk("Selected.nr====%08x\n\r", next);
 		reset_exit_reason_info(next, current);
 	}
 

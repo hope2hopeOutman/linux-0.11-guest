@@ -212,18 +212,18 @@ int printf(const char *fmt, ...)
 
 void idle_loop_in_user_mode() {
 	while (1) {
-			/* Guest OS 运行idle_loop，等待host调度一个任务，让它运行. */
-			__asm__ ("guest_loop:\n\t"            \
-					 "xorl %%eax,%%eax\n\t"       \
-					 "nop\n\t"                    \
-					 "call schedule\n\t"          \
-					 "jmp guest_loop\n\t"         \
-					 ::);
-		}
+		/* Guest OS 运行idle_loop，等待host调度一个任务，让它运行. */
+		__asm__ ("guest_loop:\n\t"            \
+				 "xorl %%eax,%%eax\n\t"       \
+				 "nop\n\t"                    \
+				 "call schedule\n\t"   /* 这里调用schedule是个大bug想想看为什么? */   \
+				 "jmp guest_loop\n\t"         \
+				 ::);
+   }
 }
 
-static char * argv[] = { NULL,NULL };
-static char * envp[] = { "HOME=/usr/root", NULL };
+static char * argv[] = {NULL,NULL};
+static char * envp[] = {"HOME=/usr/root", NULL};
 
 void init(void)
 {
@@ -250,11 +250,11 @@ void init(void)
 		(void) dup(0);
 		_exit(execve("/usr/root/a.out",argv,envp));
 	}
-	else {
-		for(;;) pause();
+
+	if (pid>0) {
+		printf("printf.task2.pid: %d \n\r", pid);  /* 这里是进程1执行的代码 */
+		while (pid != wait(&i));
 	}
 
-#if 0
-	idle_loop_in_user_mode();
-#endif
+	for(;;) pause();
 }

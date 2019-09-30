@@ -56,7 +56,7 @@ void release(struct task_struct * p)
 			task[i]=NULL;
 			if (!free_page((long)(p->tss.cr3)))  /* 先把该进程占用的目录表释放掉 */
 				panic("exit.release dir: trying to free free page");
-			if (!free_page((long)p))
+			if (!free_page((long)p))             /* 把进程占用的task_struct页释放掉 */
 				panic("exit.release: trying to free free page");
 			unlock_op(&sched_semaphore);
 			schedule();
@@ -169,23 +169,7 @@ int do_exit(long code)
 		kill_session();
 	current->state = TASK_ZOMBIE;
 	current->exit_code = code;
-	/*
-	 * 这里有必要解释下: 为什么这里注释掉tell_fater,而将它放在了task_exit_clear函数里.
-	 * 因为如果这里就通知父进程当前进程可以销毁了,那么父进程就会执行release操作,释放当前进程的目录页和task_struct占用的内存页,
-	 * 一旦释放了这两个内存页,她们就有可能被其他新进程占用,以上的操作早于随后执行的reset_ap_context那么,当前进程的目录页就作废了,
-	 * 内存映射就出问题了程序就崩溃了.
-	 * 所以把tell_father放在task_exit_clear里就不可能会出现这个错误.
-	 *  */
-	//tell_father(current->father);
-	if (get_current_apic_id() == apic_ids[0].apic_id) {
-		/* 在BSP上退出一个进程后，自主调用schedule，这里是不可能的，因为BSP只运行task0和task1，但这两个进程是不可能退出的，除非系统崩溃了 */
-	    panic("System encounters fatal errors, abort.");
-	}
-	else {
-		printk("task[%d],exit at AP[%d]\n\r", current->task_nr, get_current_apic_id());
-		/* 进程退出后,要重置该AP的执行上下文. */
-		reset_ap_context();
-	}
+	tell_father(current->father);
 	return (-1);	/* just to suppress warnings */
 }
 
