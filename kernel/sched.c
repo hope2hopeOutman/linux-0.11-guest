@@ -70,10 +70,10 @@ union task_union vm_defualt_task = {INIT_TASK,};
  */
 
 /* 所有processor的apicId存储在这里 */
-struct apic_info apic_ids[LOGICAL_PROCESSOR_MAXIMUM] = {{0,0,BSP_APIC_REGS_DEFAULT_LOCATION,0,0,&(init_task.task)},
-		                                                {0,0,BSP_APIC_REGS_DEFAULT_LOCATION,0,0,&(ap_default_task.task)},
-		                                                {0,0,BSP_APIC_REGS_DEFAULT_LOCATION,0,0,&(ap_default_task.task)},
-														{0,0,BSP_APIC_REGS_DEFAULT_LOCATION,0,0,&(ap_default_task.task)},};
+struct apic_info apic_ids[LOGICAL_PROCESSOR_MAXIMUM] = {{1,0,BSP_APIC_REGS_DEFAULT_LOCATION,0,0,&(init_task.task)},
+		                                                {0,1,BSP_APIC_REGS_DEFAULT_LOCATION,0,0,&(init_task.task)},
+		                                                {0,2,BSP_APIC_REGS_DEFAULT_LOCATION,0,0,&(init_task.task)},
+														{0,3,BSP_APIC_REGS_DEFAULT_LOCATION,0,0,&(init_task.task)},};
 long volatile jiffies=0;
 long startup_time=0;
 struct task_struct *last_task_used_math = NULL;
