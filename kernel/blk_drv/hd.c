@@ -34,7 +34,7 @@ inb_p(0x71); \
 #define MAX_ERRORS	7
 #define MAX_HD		2
 
-static void recal_intr(void);
+void recal_intr(void);
 
 static int recalibrate = 1;
 static int reset = 1;
@@ -130,6 +130,7 @@ int sys_setup(void * BIOS)
 		
 	*/
 
+#if 1
 	if ((cmos_disks = CMOS_READ(0x12)) & 0xf0)
 		if (cmos_disks & 0x0f)
 			NR_HD = 2;
@@ -137,6 +138,9 @@ int sys_setup(void * BIOS)
 			NR_HD = 1;
 	else
 		NR_HD = 0;
+#else
+	NR_HD = 1;
+#endif
 	for (i = NR_HD ; i < 2 ; i++) {
 		hd[i*5].start_sect = 0;
 		hd[i*5].nr_sects = 0;
@@ -167,7 +171,7 @@ int sys_setup(void * BIOS)
 	return (0);
 }
 
-static int controller_ready(void)
+int controller_ready(void)
 {
 	int retries=10000;
 
@@ -175,7 +179,7 @@ static int controller_ready(void)
 	return (retries);
 }
 
-static int win_result(void)
+int win_result(void)
 {
 	int i=inb_p(HD_STATUS);
 
@@ -186,7 +190,7 @@ static int win_result(void)
 	return (1);
 }
 
-static void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
+void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 		unsigned int head,unsigned int cyl,unsigned int cmd,
 		void (*intr_addr)(void))
 {
@@ -208,7 +212,7 @@ static void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 	outb(cmd,++port);
 }
 
-static int drive_busy(void)
+int drive_busy(void)
 {
 	unsigned int i;
 
@@ -223,7 +227,7 @@ static int drive_busy(void)
 	return(1);
 }
 
-static void reset_controller(void)
+void reset_controller(void)
 {
 	int	i;
 
@@ -236,7 +240,7 @@ static void reset_controller(void)
 		printk("HD-controller reset failed: %02x\n\r",i);
 }
 
-static void reset_hd(int nr)
+void reset_hd(int nr)
 {
 	reset_controller();
 	hd_out(nr,hd_info[nr].sect,hd_info[nr].sect,hd_info[nr].head-1,
@@ -248,7 +252,7 @@ void unexpected_hd_interrupt(void)
 	printk("Unexpected HD interrupt\n\r");
 }
 
-static void bad_rw_intr(void)
+void bad_rw_intr(void)
 {
 	if (++CURRENT->errors >= MAX_ERRORS)
 		printk("Happended errors: %d \n\r", CURRENT->errors);
@@ -300,7 +304,7 @@ void write_intr(void)
 	do_hd_request();
 }
 
-static void recal_intr(void)
+void recal_intr(void)
 {
 	if (win_result())
 		bad_rw_intr();
