@@ -372,12 +372,23 @@ __asm__("std ; repne ; scasb\n\t"
 return __res;
 }
 
+void vm_exit(ulong  exit_reason_no, cpuid_exit_info* exit_info) {
+	exit_reason_cpuid* exit_reason_cpuid_info_p = (exit_reason_cpuid*) VM_EXIT_REASON_CPUID_INFO_ADDR;
+	exit_reason_cpuid_info_p->exit_reason_no = exit_reason_no;
+	exit_reason_cpuid_info_p->exit_info = *exit_info;
+	__asm__ ("cpuid\n\r"::);
+}
+
 void free_ept_page(ulong guest_page_phy_addr) {
+	vm_exit(VM_EXIT_REASON_CPUID_FOR_FREE_EPT_PAGE,(cpuid_exit_info*)(&guest_page_phy_addr));
+}
+
+/*void free_ept_page(ulong guest_page_phy_addr) {
 	exit_reason_cpuid* exit_reason_cpuid_info_p = (exit_reason_cpuid*) VM_EXIT_REASON_CPUID_INFO_ADDR;
 	exit_reason_cpuid_info_p->exit_reason_no = VM_EXIT_REASON_CPUID_FOR_FREE_EPT_PAGE;
 	exit_reason_cpuid_info_p->exit_info = (cpuid_exit_info){(exit_reason_free_ept_page){guest_page_phy_addr}};
 	__asm__ ("cpuid\n\r"::);
-}
+}*/
 
 /*
  * Free a page of memory at physical address 'addr'. Used by

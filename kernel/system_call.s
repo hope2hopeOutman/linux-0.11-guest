@@ -197,22 +197,17 @@ timer_interrupt:
 	movl $0x10,%edx
 	mov %dx,%ds
 	mov %dx,%es
-	call check_default_task_running_on_ap
-	cmpl $0x00,%eax
-	jne 1f
-	movl $0x17,%edx
-	jmp 2f
-1:  movl $0x10,%edx     /* 这里要再次给edx赋值0x10,因为GCC在编译函数调用时,是不会自动保存eax,ecx,和edx的值的,所以在调用完get_current_apic_id后,edx的值被修改了,要重新赋值*/
-2:	mov %dx,%fs         /* 这块会引起AP报general protection错误,因为AP初始化的时候压根就没有加载默认的LDT,只加载了默认的TSS了. */
+	mov %dx,%fs         /* 这块会引起AP报general protection错误,因为AP初始化的时候压根就没有加载默认的LDT,只加载了默认的TSS了. */
 	incl jiffies
-	//movb $0x20,%al    /* EOI to interrupt controller #1  for 8253 timer */
-	//outb %al,$0x20
 	call send_EOI       /* 自己挖的大坑,没有改成向APIC timer发送EOI,导致AP上的timer不起作用,EOI to interrupt controller #1  for APIC timer */
+
 	movl CS(%esp),%eax  /* 这里将CS段选择符的值复制到eax,大家知道，段选择符的低3位分别是:(高1位: tableIndex(0-GDT表，1-LDT表)，低2位: CPL) */
 	andl $3,%eax		/* %eax is CPL (0 or 3, 0=supervisor) 这里把CPL当作参数传递给do_timer，如果当前进程在内核态的话，是不会导致任务切换的 */
+	/*
 	pushl %eax
 	call do_timer		# 'do_timer(long CPL)' does everything from
 	addl $4,%esp		# task switching to accounting ...
+	*/
 	jmp ret_from_sys_call
 
 .align 4
@@ -322,7 +317,7 @@ handle_ipi_interrupt:
 	pushl %ecx
 	pushl %edx
 	call send_EOI
-	call schedule
+	call read_intr
 	popl %edx
 	popl %ecx
 	popl %ebx

@@ -15,7 +15,7 @@
 #include "blk.h"
 
 /************************ semaphore variable ******************************/
-unsigned long buffer_semaphore = 0;
+ulong buffer_semaphore = 0;
 /**************************************************************************/
 
 /*
@@ -69,7 +69,7 @@ void unlock_buffer(struct buffer_head * bh)
  * It disables interrupts so that it can muck with the
  * request-lists in peace.
  */
-static void add_request(struct blk_dev_struct * dev, struct request * req)
+void add_request(struct blk_dev_struct * dev, struct request * req)
 {
 	struct request * tmp;
 
@@ -97,7 +97,7 @@ static void add_request(struct blk_dev_struct * dev, struct request * req)
 	sti();
 }
 
-static void make_request(int major,int rw, struct buffer_head * bh)
+void make_request(int major,int rw, struct buffer_head * bh)
 {
 	struct request * req;
 	int rw_ahead;

@@ -168,6 +168,8 @@ int check_default_task_running_on_ap() {
 	return 0;
 }
 
+
+
 /*
  * 向指定的AP发送IPI中断消息,要先写ICR的高32位，因为写低32位就会触发IPI了，
  * 所以要现将apic_id写到destination field,然后再触发IPI。
@@ -199,10 +201,24 @@ __asm__ ("movl bsp_apic_default_location,%%edx\n\t" \
 
 /* 发送中断处理结束信号： end of interrupt */
 void send_EOI() {
+	/*
+	 * 这里获得apic的基地址是0xFEE00000,但是我们知道VM的整个4G虚拟内存是由32M～128M的物理内存模拟的，所以这里有问题,
+	 * 因为0xFEE00000最终会被映射到这<128M的实际物理内存空间，所以apic timer是不能正常工作的.
+	 * 有两种处理方法：
+	 * 1. 对这个地址在EPT中进行特殊处理，采用实地址映射.
+	 * 2. 触发VM-EXIT到VMM中处理.
+	 */
+	ulong eoi = 0;
+	vm_exit(VM_EXIT_REASON_CPUID_FOR_SEND_EOI, (cpuid_exit_info*)(&eoi));
+
+#if 0
 	unsigned long apic_id = get_current_apic_id();
 	struct apic_info* apic = get_apic_info(apic_id);
 	if (apic) {
+
+
 		unsigned long addr = apic->apic_regs_addr;
+
 		addr = remap_msr_linear_addr(addr);
 		__asm__("addl $0xB0,%%eax\n\t" /* EOI register offset relative with APIC_REGS_BASE is 0xB0 */ \
 				"movl $0x00,0(%%eax)"  /* Write EOI register */ \
@@ -210,6 +226,8 @@ void send_EOI() {
 				);
 		recov_msr_swap_linear(addr);
 	}
+#endif
+
 }
 #else
 void send_IPI(int apic_id, int v_num) {

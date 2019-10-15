@@ -6,6 +6,8 @@
 
 typedef unsigned long  ulong;
 
+extern void vm_exit();
+
 typedef struct desc_struct {
 	unsigned long a,b;
 } desc_table[256];
@@ -25,6 +27,10 @@ typedef struct exit_reason_fork {
 typedef struct exit_reason_free_ept_page{
 	ulong  guest_page_phy_addr;
 }exit_reason_free_ept_page;
+
+typedef struct exit_reason_send_eoi{
+	ulong  eoi;
+}exit_reason_send_eoi;
 
 typedef union cpuid_exit_info {
 	exit_reason_free_ept_page free_ept_page_info;
@@ -382,5 +388,6 @@ extern unsigned long caching_linear_addr(unsigned long* addr_array, int length, 
 
 /* 通过cpuid指令触发VM-EXIT,用于不同的业务，这里针对不同的业务做了如下的区分 */
 #define VM_EXIT_REASON_CPUID_FOR_FREE_EPT_PAGE 1
+#define VM_EXIT_REASON_CPUID_FOR_SEND_EOI      2
 
 #endif

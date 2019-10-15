@@ -34,6 +34,10 @@ inb_p(0x71); \
 #define MAX_ERRORS	7
 #define MAX_HD		2
 
+/************************ semaphore variable ******************************/
+ulong block_request_semaphore = 0;
+/**************************************************************************/
+
 void recal_intr(void);
 
 static int recalibrate = 1;
@@ -264,16 +268,13 @@ void bad_rw_intr(void)
 void read_intr(void)
 {
 	if (win_result()) {
+		//unlock_op(&block_request_semaphore);
+		printk("bad_rw_intr occur.\n\r");
 		bad_rw_intr();
 		do_hd_request();
 		return;
 	}
 	port_read(HD_DATA,CURRENT->buffer,256);
-
-	/*int apic_id = get_current_apic_id();
-	if (apic_id > 0) {
-		printk("current_apic_id: %d \n\r", apic_id);
-	}*/
 
 	CURRENT->errors = 0;
 	CURRENT->buffer += 512;
@@ -282,6 +283,7 @@ void read_intr(void)
 		do_hd = &read_intr;
 		return;
 	}
+	//unlock_op(&block_request_semaphore);
 	end_request(1);
 	do_hd_request();
 }
@@ -319,6 +321,9 @@ void do_hd_request(void)
 	unsigned int nsect;
 
 	INIT_REQUEST;
+
+	//lock_op(&block_request_semaphore);  /* 这个锁会在read_intr中,当sector_read_nr=0时被释放，这样才可以处理下一个request */
+
 	dev = MINOR(CURRENT->dev);
 	block = CURRENT->sector;
 	if (dev >= 5*NR_HD || block+2 > hd[dev].nr_sects) {
@@ -358,10 +363,16 @@ void do_hd_request(void)
 			goto repeat;
 		}
 		port_write(HD_DATA,CURRENT->buffer,256);
-	} else if (CURRENT->cmd == READ) {
+	}
+	else if (CURRENT->cmd == READ) {
+		//lock_op(&block_request_semaphore);  /* 这个锁会在read_intr中,当sector_read_nr=0时被释放，这样才可以处理下一个request */
 		hd_out(dev,nsect,sec,head,cyl,WIN_READ,&read_intr);
-	} else
+	}
+	else {
 		panic("unknown hd-command");
+	}
+
+	//unlock_op(&block_request_semaphore);  /* 这个锁会在read_intr中,当sector_read_nr=0时被释放，这样才可以处理下一个request */
 }
 
 void hd_init(void)

@@ -176,6 +176,7 @@ void main(void)		/* This really IS void, no error here. */
 #endif
 	mem_init(main_memory_start,memory_end);
 	trap_init();
+	ipi_intr_init();
 	blk_dev_init();
 	chr_dev_init();
 	tty_init();
