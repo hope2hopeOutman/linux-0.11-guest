@@ -38,7 +38,7 @@
 #define WIN_FORMAT		0x50
 #define WIN_INIT		0x60
 #define WIN_SEEK 		0x70
-#define WIN_DIAGNOSE		0x90
+#define WIN_DIAGNOSE	0x90
 #define WIN_SPECIFY		0x91
 
 /* Bits for HD_ERROR */

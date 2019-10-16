@@ -253,7 +253,7 @@ void init(void)
 	}
 
 	if (pid>0) {
-		printf("printf.task2.pid: %d \n\r", pid);  /* 这里是进程1执行的代码 */
+		//printf("printf.task2.pid: %d \n\r", pid);  /* 这里是进程1执行的代码 */
 		while (pid != wait(&i));
 	}
 

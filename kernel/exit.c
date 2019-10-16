@@ -59,6 +59,10 @@ void release(struct task_struct * p)
 			if (!free_page((long)p))             /* 把进程占用的task_struct页释放掉 */
 				panic("exit.release: trying to free free page");
 			unlock_op(&sched_semaphore);
+
+			ulong game_over = 0;
+			vm_exit(VM_EXIT_REASON_CPUID_FOR_GAME_OVER, (cpuid_exit_info*)(&game_over));
+
 			schedule();
 			return;
 		}

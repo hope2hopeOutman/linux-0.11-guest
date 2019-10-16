@@ -22,6 +22,8 @@
 #include <asm/io.h>
 #include <asm/segment.h>
 
+#include <linux/head.h>
+
 #define MAJOR_NR 3
 #include "blk.h"
 
@@ -194,6 +196,10 @@ int win_result(void)
 	return (1);
 }
 
+void set_vm_hd_oper(ulong hd_cmd) {
+	*(ulong*) VM_HD_OPERATION_ADDR = hd_cmd;
+}
+
 void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 		unsigned int head,unsigned int cyl,unsigned int cmd,
 		void (*intr_addr)(void))
@@ -204,6 +210,9 @@ void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 		panic("Trying to write bad sector");
 	if (!controller_ready())
 		panic("HD controller not ready");
+
+	set_vm_hd_oper(cmd);
+
 	do_hd = intr_addr;
 	outb_p(hd_info[drive].ctl,HD_CMD);
 	port=HD_DATA;

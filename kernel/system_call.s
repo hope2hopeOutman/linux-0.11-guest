@@ -67,7 +67,7 @@ nr_system_calls = 72
  */
 .globl system_call,sys_fork,timer_interrupt,sys_execve
 .globl hd_interrupt,floppy_interrupt,parallel_interrupt
-.globl device_not_available, coprocessor_error, parse_cpu_topology,handle_ipi_interrupt
+.globl device_not_available, coprocessor_error, parse_cpu_topology,handle_vm_hd_ipi_interrupt
 
 .align 4
 bad_sys_call:
@@ -311,15 +311,29 @@ parse_cpu_topology:
 	popl %eax
 	iret
 
-handle_ipi_interrupt:
+handle_vm_hd_ipi_interrupt:
 	pushl %eax
-	pushl %ebx
 	pushl %ecx
 	pushl %edx
-	call send_EOI
-	call read_intr
+	push %ds
+	push %es
+	push %fs
+	movl $0x10,%eax
+	mov %ax,%ds
+	mov %ax,%es
+	movl $0x17,%eax
+	mov %ax,%fs
+	call send_EOI	# EOI to APIC interrupt controller #1
+	xorl %edx,%edx
+	xchgl do_hd,%edx
+	testl %edx,%edx
+	jne 1f
+	movl $unexpected_hd_interrupt,%edx
+1:	call *%edx		# "interesting" way of handling intr.
+	pop %fs
+	pop %es
+	pop %ds
 	popl %edx
 	popl %ecx
-	popl %ebx
 	popl %eax
 	iret
