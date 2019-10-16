@@ -210,8 +210,8 @@ void trap_init(void)
 	set_trap_gate(39,&parallel_interrupt);
 }
 
-void handle_vm_hd_ipi_interrupt(void);
+void handle_vm_hd_ipi_intr(void);
 void ipi_intr_init(void)
 {
-	set_intr_gate(HD_IPI_INTR_NO,&handle_vm_hd_ipi_interrupt);
+	set_intr_gate(HD_IPI_INTR_NO,&handle_vm_hd_ipi_intr);
 }
