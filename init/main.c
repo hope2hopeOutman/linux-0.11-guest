@@ -259,3 +259,7 @@ void init(void)
 
 	for(;;) pause();
 }
+
+void print_ap_info() {
+	panic("AP directly response to HD_INTR\n\r");
+}

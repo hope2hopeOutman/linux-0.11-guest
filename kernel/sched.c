@@ -907,14 +907,40 @@ void sched_init(void)
  * 3. 由task switch触发的VM-EXIT,在执行VM-RESUME后，都会到该函数中执行真正的任务切换。
  */
 void task_switch() {
+	/*
+	 *  啦啦啦BigBug*BigBug*BigBug*啦啦啦BigBug*BigBug*BigBug*啦啦啦BigBug*BigBug*BigBug*啦啦啦BigBug*BigBug*BigBug*
+	 *
+	 *  任务切换隐藏了一个很深的monster bug，还是与FS段的设置与备份相关，以前的在实现多核任务调度的过程中也遇到这个问题。
+	 *
+	 *  造成这个bug的根本原因还是任务系统调用后会将FS设置为0x17指向用户态，这样在内核态就可以访问用户态的数据了(还记得get_fs_byte吗),
+	 *  当任务执行fs read/write进入内核态其FS被system_call.s设置为0x17，当要访问HD时，在发出HD_read/write后会设置状态为interruptable_state,
+	 *  等待HD_intr(本版本是BSP发送IPI通知AP),然后执行schedule调度其他任务执行,这时会发生task_switch触发VM-EXIT进入VMM去进行新老任务的备份和设置，
+	 *  这时老任务的FS段肯定是被设置为0x17保存在exit_reason_task_switch->old_task_tss.fs中的.
+	 *  但是当再次调度老任务的时候，这里并没有还原老任的fs所以造成任务在内核太访问用户态数据时出错,
+	 *  太佩服自己了，通过纯代码逻辑推理在中断和任务切换等各种导致VM-EXIT的嵌套中，最终还是被我发现了(借我借我借我一双慧眼吧O(∩_∩)O哈哈~)。
+	 *  其实主要还是这种情况很少出现，出现了想debug但悲催的是老是跟不进去，在此再次吐槽下GDB在虚拟化里的调试有点太不稳定了，连hb中断有时也跟不进去。
+	 */
+
 	/* 备份老任务的内核态ksp和kip到其对应task_struct.tss的esp和eip */
 	exit_reason_task_switch_struct* exit_reason_task_switch = (exit_reason_task_switch_struct*) VM_EXIT_REASON_TASK_SWITCH_INFO_ADDR;
+	/*
+	 * 这里有必要解释一下为什么要这么设置老任务的tss段
+	 * 因为在guest_state fields没有对应的field用于保存esp0和ss0等tss字段，
+	 * 当VM-EXIT到VMM中备份老任务的tss段时,这些字段就没有被设置，所以为空。
+	 * 因此在将exit_reason_task_switch->old_task_tss复制到task[n]->tss之前，要先备份task[n]->tss的这些字段，
+	 * 因为复制完后这些字段会被设置为0，然后利用这些备份的值再还原这些值，数据的完整性就得到了保证。
+	 */
+
+	/* 备份老任务原先的某些字段值 */
 	ulong ldt  = task[exit_reason_task_switch->old_task_nr]->tss.ldt;
 	ulong esp0 = task[exit_reason_task_switch->old_task_nr]->tss.esp0;
 	ulong cr3  = task[exit_reason_task_switch->old_task_nr]->tss.cr3;
 	ulong eflags  = task[exit_reason_task_switch->old_task_nr]->tss.eflags;
 	ulong ss0  = task[exit_reason_task_switch->old_task_nr]->tss.ss0;
+
 	task[exit_reason_task_switch->old_task_nr]->tss = exit_reason_task_switch->old_task_tss;
+
+	/* 还原老任务的某些字段值 */
 	task[exit_reason_task_switch->old_task_nr]->tss.ldt  = ldt;
 	task[exit_reason_task_switch->old_task_nr]->tss.esp0 = esp0;
 	task[exit_reason_task_switch->old_task_nr]->tss.cr3  = cr3;
@@ -993,15 +1019,24 @@ void task_switch() {
 	else {
 		/*
 		 * 对于老进程的恢复，只需要还原老进程的内核栈,kip和eflags及eax,ebx,ecx,edx,esi,edi和ebp即可，其它的会在iret中恢复。
+		 *
 		 * 这里有一个比较tricky的操作，将被调度任务的第一条要运行的指令的地址入栈到自己的内核栈中，想想看为什么要这样操作?
 		 * 因为要还原被调度任务的内核态上下文，就要依次还原其内核态的eflags,esi,edi,eax,ebx,ecx,edx,ebp,esp,eip
-		 * 因为是从一个任务的内核态切换到另一个任务的内核态，所以不能用iret指令一次性从当前任务的内核栈中弹出ss,esp,eflags,cs,eip
-		 * 所以，通过手工的方式还原的话，一旦更改了当前任务的内核栈为被调度的内核栈后，当前任务的内核栈就不可用了，存储在其中的
-		 * 被调用任务的eip也就访问不到了，这时调用ret指令弹出的是被调用任务的内核栈的栈顶数据，肯定是不对的，所以就有了这个比较tricky的方法O(∩_∩)O哈哈~
+		 * 但由于是从一个任务的内核态切换到另一个任务的内核态，所以不能用iret指令一次性从当前任务的内核栈中弹出ss,esp,eflags,cs,eip,
+		 * 所以，通过手工的方式还原的话，一旦更改了当前任务的内核栈为被调度任务的内核栈后，当前任务的内核栈就不可用了，存储在其中的被调用任务的eip也就访问不到了,
+		 * 这时调用ret指令弹出的是被调用任务的内核栈的栈顶数据，肯定是不对的，所以就有了这个比较tricky的方法O(∩_∩)O哈哈~
+		 *
+		 * 这里再次强调一下: 不管3721，一定要在调用ret指令之前还原被调度任务的tss.fs到FS寄存器.
 		 */
 
 		ulong* kernel_stack = (ulong* )(task[new_task_nr]->tss.esp -= 4); /* 在被调度进程的内核栈中开辟4字节空间用于存储自己的eip,供后面的ret调用 */
 		*kernel_stack = task[new_task_nr]->tss.eip;
+
+		/*
+		 * 不管3721先还原被调度任务的FS段选择子到FS寄存器，吓死宝宝了O(∩_∩)O哈哈~
+		 * 现在系统已经很稳定喽，真的是太不容易，Develop a high available and robust OS is so much hard.
+		 */
+		__asm__ ("mov %%ax,%%fs;"::"a" (task[new_task_nr]->tss.fs));
 
 		__asm__ ("pushl %%eax\n\t"  \
 				 "pushl %%ecx\n\t"  \

@@ -239,6 +239,8 @@ hd_interrupt:
 	push %ds
 	push %es
 	push %fs
+	call print_ap_info
+	jmp iret_addr
 	movl $0x10,%eax
 	mov %ax,%ds
 	mov %ax,%es
@@ -255,6 +257,7 @@ hd_interrupt:
 	movl $unexpected_hd_interrupt,%edx
 1:	outb %al,$0x20
 	call *%edx		# "interesting" way of handling intr.
+iret_addr:
 	pop %fs
 	pop %es
 	pop %ds
