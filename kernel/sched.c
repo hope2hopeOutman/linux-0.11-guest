@@ -206,7 +206,12 @@ void send_EOI() {
 	 * 因为0xFEE00000最终会被映射到这<128M的实际物理内存空间，所以apic timer是不能正常工作的.
 	 * 有两种处理方法：
 	 * 1. 对这个地址在EPT中进行特殊处理，采用实地址映射.
-	 * 2. 触发VM-EXIT到VMM中处理.
+	 * 2. 触发VM-EXIT到VMM中处理, 这里就是采用这种方法实现GuestOS发送EOI.
+	 *
+	 * 到这里才真正明白Virtual-APIC的真正价值和意义:
+	 * 如果CPU支持该feature的话，那么GuestOS就可以在VM中通过访问apic-access-page和virtual-apic-page来完成EOI操作(由硬件完成后续映射和EOI操作)，
+	 * 不用在VM-EXIT到VMM中通过remap_msr后访问apic-regs了,效率比现在这种处理方式高多了,难怪放在高端处理器上,
+	 * 同时再次证明将内核空间放在最高1G地址空间是多么的英明啊，一开始是故意将内核地址空间放在开始的1G低地址空间的，现在是多么痛的领悟啊.
 	 */
 	ulong eoi = 0;
 	vm_exit(VM_EXIT_REASON_CPUID_FOR_SEND_EOI, (cpuid_exit_info*)(&eoi));
